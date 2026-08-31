@@ -1,0 +1,55 @@
+---
+title: Make data addressable
+module: M5 · Data
+order: 9
+summary: Separate how one example is retrieved from how examples are batched, shuffled, and delivered to a model.
+colab: m5_data.ipynb
+concepts: [Dataset, DataLoader, transform, split]
+duration: 11
+---
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## One example at an index
+
+A `Dataset` answers two questions: how many examples exist, and what is example `i`? It does not decide batch size or shuffle order.
+
+```python
+from torch.utils.data import Dataset
+import torch
+
+class PointDataset(Dataset):
+    def __init__(self, points, labels):
+        self.points = torch.as_tensor(points, dtype=torch.float32)
+        self.labels = torch.as_tensor(labels, dtype=torch.long)
+
+    def __len__(self):
+        return len(self.points)
+
+    def __getitem__(self, index):
+        return self.points[index], self.labels[index]
+```
+
+This boundary is useful because storage can change without changing training. `__getitem__` might index a tensor, open an image on disk, decode audio, or fetch a cached record.
+
+## Transform at the boundary
+
+Training transforms should create plausible variations without changing the label: a small crop might preserve “cat,” while flipping a handwritten digit can change its identity. Validation transforms must be deterministic so metrics mean the same thing each run.
+
+```python
+train_transform = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+])
+```
+
+<Callout type="warn" title="Split before fitting preprocessing">
+Statistics such as normalization means must be computed from the training split only. Using validation data leaks information into training and makes evaluation optimistic.
+</Callout>
+
+## Inspect before training
+
+Check several examples and print their shape, range, type, and label. Many “model” failures are actually swapped dimensions, values scaled incorrectly, or labels encoded differently from the loss function's expectation.
+
+<Quiz client:visible question="Should random augmentation be applied to the validation dataset?" answer="No. Validation should measure the same task consistently. Use deterministic resize/normalization there and reserve random augmentation for training." />

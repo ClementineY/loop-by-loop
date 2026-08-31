@@ -1,0 +1,56 @@
+---
+title: Assemble an image classifier
+module: M6 · Convolution
+order: 12
+summary: Combine convolution, activation, downsampling, and a classification head while tracking every shape.
+colab: m6_convolution.ipynb
+concepts: [CNN, pooling, adaptive pooling, logits]
+duration: 15
+---
+import ConvVisualizer from '../../components/widgets/ConvVisualizer.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## From pixels to evidence
+
+A convolutional classifier gradually trades spatial detail for richer features. Convolutions gather local evidence; activations add nonlinearity; pooling or stride reduces resolution; the final head produces one logit per class.
+
+```python
+from torch import nn
+
+class SmallCNN(nn.Module):
+    def __init__(self, classes=10):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1),
+        )
+        self.head = nn.Linear(64, classes)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.flatten(1)
+        return self.head(x)
+```
+
+<ConvVisualizer client:visible />
+
+For `[32, 3, 32, 32]`, the first convolution produces `[32, 32, 32, 32]`; max pooling produces `[32, 32, 16, 16]`; the second convolution produces `[32, 64, 16, 16]`; adaptive average pooling produces `[32, 64, 1, 1]`; flattening produces `[32, 64]`.
+
+Adaptive pooling makes the classifier head independent of the original image size. It summarizes each learned feature map into one number.
+
+## Inspect rather than guess
+
+```python
+images, labels = next(iter(train_loader))
+logits = model(images)
+assert logits.shape == (len(images), 10)
+loss = nn.CrossEntropyLoss()(logits, labels)
+```
+
+Write the shape story before tuning the architecture. Most early CNN errors are dimensional, not mathematical.
+
+<Quiz client:visible question="Why does the final layer return logits rather than class probabilities?" answer="CrossEntropyLoss combines log-softmax with negative log likelihood in one numerically stable operation. During inference, argmax gives the same predicted class with or without softmax." />

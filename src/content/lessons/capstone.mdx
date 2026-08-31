@@ -1,0 +1,56 @@
+---
+title: "Capstone: a trustworthy classifier"
+module: M8 · Ship a model
+order: 16
+summary: Combine the course into one small image-classification project with explicit baselines, validation, and a reproducible model card.
+colab: m8_ship.ipynb
+concepts: [capstone, evaluation, confusion matrix, model card]
+duration: 25
+---
+import Quiz from '../../components/Quiz.svelte';
+
+## Your goal
+
+Train a CIFAR-10 classifier that is not merely accurate, but understandable. The notebook supplies loading and plotting code; your job is to make and defend the modeling choices.
+
+## 1. Establish the contract
+
+Inspect a batch. Write the input and output shapes. Confirm class names, pixel range, and split sizes. Create a simple baseline: random guessing is 10%; a tiny linear classifier establishes whether the pipeline can learn at all.
+
+## 2. Build the smallest useful CNN
+
+Start with two convolution blocks and adaptive pooling. Count parameters. Before full training, overfit one small batch—if the network cannot drive that loss near zero, the implementation or optimization is probably wrong.
+
+## 3. Run a controlled experiment
+
+Choose one change: augmentation, weight decay, an extra convolution, or a learning-rate schedule. Write your prediction before training. Keep the seed and other settings fixed.
+
+```python
+for epoch in range(config["epochs"]):
+    train_metrics = train_one_epoch(model, train_loader, optimizer)
+    val_metrics = evaluate(model, val_loader)
+    scheduler.step()
+
+    if val_metrics["loss"] < best_loss:
+        best_loss = val_metrics["loss"]
+        torch.save(model.state_dict(), "best.pt")
+```
+
+## 4. Look beyond accuracy
+
+Build a confusion matrix. Find several confident mistakes. Are particular classes confused? Is the input ambiguous, mislabeled, or outside the training distribution? Aggregate metrics locate a problem; examples explain it.
+
+## 5. Write a miniature model card
+
+Document intended use, training data, metric, known limitations, and the exact command or notebook cell that reproduces evaluation. This turns a checkpoint into a communicable artifact.
+
+## Definition of done
+
+- A held-out test result reported once
+- Training and validation curves
+- A confusion matrix and inspected errors
+- A saved `state_dict`
+- Configuration and seed recorded
+- A short explanation of what you would try next
+
+<Quiz client:visible question="Why overfit a single small batch before running the full experiment?" answer="It is a high-signal integration test. A sufficiently flexible model should memorize a tiny batch. Failure suggests a bug in shapes, labels, loss, gradients, or updates before expensive training begins." />

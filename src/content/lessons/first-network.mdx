@@ -1,0 +1,59 @@
+---
+title: Your first nn.Module
+module: M4 · Neural networks
+order: 8
+summary: Package layers and a forward computation into a reusable model whose parameters PyTorch can discover.
+colab: m4_networks.ipynb
+concepts: [nn.Module, Linear, forward, parameters]
+duration: 14
+---
+import TrainingLoop from '../../components/widgets/TrainingLoop.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## A model is a parameterized function
+
+Subclassing `nn.Module` gives PyTorch a standard way to find parameters, move them between devices, switch training modes, and save state.
+
+```python
+import torch
+from torch import nn
+
+class MoonClassifier(nn.Module):
+    def __init__(self, hidden=8):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(2, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(self, x):
+        return self.network(x).squeeze(-1)
+
+model = MoonClassifier(hidden=8)
+print(sum(p.numel() for p in model.parameters()))
+```
+
+`__init__` creates stateful building blocks. `forward` describes how data flows through them. Call `model(x)`, not `model.forward(x)`: the module call wraps hooks and framework behavior around `forward`.
+
+<TrainingLoop client:visible />
+
+The first layer maps each two-dimensional point to `hidden` learned features. Tanh bends those features. The last layer recombines them into one score. Hidden width changes capacity: too few units may underfit, while more units add flexibility and computation.
+
+## Know your shapes
+
+For a batch of 32 points:
+
+```text
+[32, 2] → Linear(2, 8) → [32, 8]
+        → Tanh         → [32, 8]
+        → Linear(8, 1) → [32, 1]
+        → squeeze(-1)  → [32]
+```
+
+<Callout type="note" title="Modules register attributes">
+Layers assigned to `self` are registered automatically. Storing layers in a plain Python list does not register their parameters; use `nn.ModuleList` when the number of layers is dynamic.
+</Callout>
+
+<Quiz client:visible question="For Linear(2, 8), how many trainable values are there including bias?" answer="24: the weight matrix has 8 × 2 = 16 values and the bias has 8, for a total of 24." />

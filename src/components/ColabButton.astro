@@ -1,0 +1,14 @@
+---
+interface Props { notebook: string; }
+const { notebook } = Astro.props;
+import { SITE } from '../config';
+const url = `https://colab.research.google.com/github/${SITE.colabRepository}/blob/main/notebooks/${notebook}`;
+---
+<a class="colab-btn" href={url} target="_blank" rel="noopener">
+  <span aria-hidden="true">↗</span><span><small>REAL PYTORCH</small>Run this lesson in Colab</span>
+</a>
+<style>
+  .colab-btn { display:inline-flex;align-items:center;gap:.8rem;border:1px solid var(--border);background:var(--surface);
+    color:var(--text);padding:.7rem .9rem;border-radius:var(--radius);text-decoration:none;font-weight:720;font-size:.9rem;box-shadow:0 8px 28px var(--shadow); }
+  .colab-btn>span:first-child{display:grid;place-items:center;width:2.2rem;height:2.2rem;border-radius:8px;background:var(--accent);color:white;font-size:1.15rem}.colab-btn span:last-child{display:flex;flex-direction:column}.colab-btn small{font:.700 .58rem var(--font-mono);color:var(--text-subtle);letter-spacing:.08em}.colab-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+</style>

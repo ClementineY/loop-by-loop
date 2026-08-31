@@ -1,0 +1,47 @@
+---
+title: Turn gradients into movement
+module: M3 · Optimization
+order: 5
+summary: Use the learning rate to turn sensitivity into a controlled parameter update—and see why bigger is not always faster.
+colab: m3_optimization.ipynb
+concepts: [gradient descent, learning rate, momentum, loss]
+duration: 12
+---
+import GradientDescent from '../../components/widgets/GradientDescent.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## The update rule
+
+Gradient descent repeats one small operation:
+
+```text
+parameter ← parameter − learning_rate × gradient
+```
+
+The gradient points uphill, so subtracting it points downhill. The learning rate decides how far to travel. It is not merely a speed control: a rate that is too large can jump across the valley and grow without bound.
+
+<GradientDescent client:visible />
+
+Try learning rates `0.03`, `0.2`, `0.8`, and `1.05`. On this simple quadratic loss, values below 1 converge and values above 1 diverge. Real loss surfaces have different curvature in different directions, so there is no universal safe value.
+
+## Use an optimizer
+
+```python
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=0.05,
+    momentum=0.9,
+)
+
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
+
+Momentum keeps a moving direction. Consistent gradients build velocity; noisy changes partly cancel. It can cross shallow bumps but can also overshoot. Adam adds per-parameter adaptive scaling and is often a forgiving starting point, but SGD remains valuable because its behavior is simple to reason about.
+
+## Loss is the compass
+
+The optimizer does not know what “good predictions” mean. The loss function turns model behavior into one scalar. Classification commonly uses cross-entropy; regression often uses mean squared error. A mismatched loss can make an otherwise correct training loop learn the wrong objective.
+
+<Quiz client:visible question="The training loss alternates between smaller and much larger values. What is the first hyperparameter you would inspect?" answer="The learning rate. Large oscillations commonly mean updates are overshooting. Lower it before changing model architecture." />

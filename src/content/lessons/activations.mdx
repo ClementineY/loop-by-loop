@@ -1,0 +1,46 @@
+---
+title: Nonlinearity gives networks choices
+module: M4 · Neural networks
+order: 7
+summary: See why stacked linear layers collapse into one linear transformation and how activation functions let networks bend.
+colab: m4_networks.ipynb
+concepts: [ReLU, sigmoid, tanh, nonlinearity]
+duration: 12
+---
+import ActivationExplorer from '../../components/widgets/ActivationExplorer.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## Why linear is not enough
+
+Two linear transformations in sequence are still one linear transformation. Without something nonlinear between layers, a hundred layers cannot create a curved decision boundary.
+
+An activation function changes each intermediate value independently. That small bend gives the whole network the ability to approximate complex functions.
+
+<ActivationExplorer client:visible />
+
+Watch both output and local slope. Backpropagation multiplies gradients by that slope:
+
+- **ReLU** is fast and keeps a slope of 1 for positive inputs, but blocks gradients for negative inputs.
+- **Sigmoid** maps to `(0, 1)`, useful for a binary probability output, but saturates at both ends.
+- **Tanh** maps to `(-1, 1)` and is centered on zero, but also saturates.
+- **Leaky ReLU** preserves a small negative slope, reducing completely inactive units.
+
+## Build a block
+
+```python
+import torch.nn as nn
+
+block = nn.Sequential(
+    nn.Linear(8, 32),
+    nn.ReLU(),
+    nn.Linear(32, 2),
+)
+```
+
+The final layer has no activation because `CrossEntropyLoss` expects raw scores called logits. It applies the numerically stable probability conversion internally.
+
+## Saturation and dead units
+
+At sigmoid input `x=6`, the curve is almost flat. Multiplying by that tiny derivative shrinks the gradient reaching earlier layers. ReLU avoids positive-side saturation, although a unit receiving only negative inputs has zero gradient and can become “dead.” Initialization, normalization, and sensible learning rates help keep activations in useful regions.
+
+<Quiz client:visible question="Why not put a sigmoid before CrossEntropyLoss for a two-class output?" answer="CrossEntropyLoss expects unnormalized logits and performs log-softmax internally. Applying a probability activation first duplicates the transformation and produces worse numerical behavior." />

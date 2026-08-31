@@ -1,0 +1,51 @@
+---
+title: Save state, not the Python object
+module: M8 · Ship a model
+order: 15
+summary: Create portable checkpoints that preserve model parameters and enough training context to resume safely.
+colab: m8_ship.ipynb
+concepts: [state_dict, checkpoint, load, inference]
+duration: 10
+---
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## The portable unit is a state dictionary
+
+`state_dict()` maps stable parameter and buffer names to tensors. Save it rather than serializing the entire Python model object, which couples the file to code paths and implementation details.
+
+```python
+torch.save(model.state_dict(), "model.pt")
+
+restored = SmallCNN(classes=10)
+restored.load_state_dict(
+    torch.load("model.pt", map_location="cpu", weights_only=True)
+)
+restored.eval()
+```
+
+The architecture must be constructed before loading because the state dictionary contains values, not the `forward` method.
+
+## Resume training completely
+
+```python
+torch.save({
+    "epoch": epoch,
+    "model": model.state_dict(),
+    "optimizer": optimizer.state_dict(),
+    "best_val_loss": best_val_loss,
+    "config": config,
+}, "checkpoint.pt")
+```
+
+Optimizer state matters for momentum and Adam's running statistics. Without it, the parameters resume but the optimization trajectory does not.
+
+<Callout type="warn" title="Treat model files as data from a trust boundary">
+Load only expected formats from trusted sources. Prefer `weights_only=True` when reading PyTorch weight files and validate the model architecture and metadata separately.
+</Callout>
+
+## Verify the round trip
+
+After saving and loading, run a fixed input through both models and compare outputs. This small test catches missing buffers, configuration drift, or accidentally loading the wrong checkpoint.
+
+<Quiz client:visible question="Why call eval() after loading a model for inference?" answer="It switches modules such as dropout and batch normalization to inference behavior. Loading parameters does not change the module's training/evaluation mode." />

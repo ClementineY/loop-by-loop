@@ -1,0 +1,57 @@
+---
+title: The five-line training rhythm
+module: M3 · Optimization
+order: 6
+summary: Connect forward pass, loss, backpropagation, and the optimizer into the loop every PyTorch model uses.
+colab: m3_optimization.ipynb
+concepts: [training loop, optimizer, zero_grad, epoch]
+duration: 13
+---
+import TrainingLoop from '../../components/widgets/TrainingLoop.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## One batch at a time
+
+Every ordinary supervised training loop follows the same rhythm:
+
+```python
+model.train()
+for features, targets in train_loader:
+    optimizer.zero_grad()       # 1. clear old gradients
+    predictions = model(features) # 2. forward
+    loss = loss_fn(predictions, targets) # 3. compare
+    loss.backward()             # 4. compute gradients
+    optimizer.step()            # 5. update parameters
+```
+
+<TrainingLoop client:visible />
+
+The lab trains a real two-layer network implemented by the site's tiny automatic-differentiation engine. The shaded background is its current decision boundary. Early on it is almost arbitrary. Each epoch nudges it toward a curve that separates the two moons.
+
+## Batch, step, epoch
+
+- A **batch** is the subset used for one gradient estimate.
+- A **step** is one optimizer update.
+- An **epoch** is one pass through the training dataset.
+
+With 1,000 examples and batches of 100, one epoch contains ten steps. Reporting these terms precisely makes experiments comparable.
+
+## Validation is a different phase
+
+```python
+model.eval()
+total_correct = 0
+with torch.no_grad():
+    for features, targets in val_loader:
+        logits = model(features)
+        total_correct += (logits.argmax(1) == targets).sum().item()
+```
+
+`train()` and `eval()` change the behavior of modules such as dropout and batch normalization. They do not enable or disable gradients; `no_grad()` handles that separately.
+
+<Callout type="tip" title="Log enough to debug">
+Track training loss, validation loss, the learning rate, and at least one task metric. A single final accuracy hides whether learning was stable or accidental.
+</Callout>
+
+<Quiz client:visible question="Why clear gradients before backward rather than after optimizer.step()?" answer="Either placement can work if it happens exactly once per step, but clearing immediately before the forward/backward pair makes the lifecycle explicit and avoids accidentally accumulating gradients across batches." />

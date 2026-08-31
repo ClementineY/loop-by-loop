@@ -1,0 +1,49 @@
+---
+title: Read the gap, not just the loss
+module: M7 · Training well
+order: 13
+summary: Diagnose underfitting and overfitting by comparing training behavior with held-out validation data.
+colab: m7_training_well.ipynb
+concepts: [overfitting, validation, regularization, early stopping]
+duration: 12
+---
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Two curves tell a story
+
+Training loss answers whether the optimizer can fit examples it sees. Validation loss answers whether that fit transfers to unseen examples.
+
+- Both losses high: underfitting, optimization trouble, or weak features.
+- Both falling together: productive learning.
+- Training falls while validation rises: overfitting.
+- Noisy or exploding training loss: inspect learning rate and data first.
+
+Overfitting is not “training too well.” It is learning details that do not generalize.
+
+## Interventions with different meanings
+
+**More representative data** attacks the problem directly. **Data augmentation** encodes known invariances. **Weight decay** prefers smaller weights. **Dropout** prevents units from depending too reliably on particular partners. **Early stopping** keeps the checkpoint with the best validation result.
+
+```python
+model = nn.Sequential(
+    nn.Linear(128, 64),
+    nn.ReLU(),
+    nn.Dropout(0.2),
+    nn.Linear(64, 10),
+)
+
+optimizer = torch.optim.AdamW(
+    model.parameters(), lr=3e-4, weight_decay=1e-2
+)
+```
+
+<Callout type="warn" title="Do not tune on the test set">
+Use training data to fit, validation data to make choices, and the test set once for the final estimate. Repeatedly checking test performance turns the test set into another validation set.
+</Callout>
+
+## Capacity is a lever
+
+A larger model can fit more patterns, useful and accidental. Reducing capacity may help, but it is rarely the first move if augmentation, data quality, or validation methodology is wrong.
+
+<Quiz client:visible question="Training accuracy is 99% and validation accuracy is 67%. Would adding more hidden units be your first response?" answer="Usually no. The large generalization gap already signals excess effective capacity. First inspect the split and data, then try augmentation, weight decay, dropout, early stopping, or a smaller model." />

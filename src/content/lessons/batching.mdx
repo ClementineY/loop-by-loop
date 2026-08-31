@@ -1,0 +1,48 @@
+---
+title: Batch, shuffle, and keep workers busy
+module: M5 · Data
+order: 10
+summary: Use DataLoader to turn individual examples into efficient, unbiased training batches.
+colab: m5_data.ipynb
+concepts: [DataLoader, batch, shuffle, workers]
+duration: 10
+---
+import Quiz from '../../components/Quiz.svelte';
+
+## Why batches exist
+
+One example produces a noisy gradient and underuses vector hardware. The entire dataset produces a stable gradient but may not fit in memory and updates only once per epoch. A mini-batch balances both.
+
+```python
+from torch.utils.data import DataLoader
+
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=64,
+    shuffle=True,
+    num_workers=2,
+    pin_memory=True,
+)
+```
+
+`DataLoader` requests examples from the dataset, combines them along a new leading batch dimension, and optionally uses worker processes to prepare future batches.
+
+## Shuffle breaks accidental structure
+
+Datasets are often ordered by label, time, or source. Without shuffling, several consecutive optimizer steps may see only one class. That biases each gradient toward the local ordering rather than the full training distribution.
+
+Do not shuffle validation data unless a downstream consumer requires it. Order does not change aggregate metrics, and stable order makes debugging examples easier.
+
+## The final smaller batch
+
+If dataset size is not divisible by batch size, the final batch is smaller. Most models handle this naturally. Set `drop_last=True` only when fixed batch size is genuinely required, such as some contrastive objectives or distributed synchronization patterns.
+
+```python
+for features, labels in train_loader:
+    print(features.shape, labels.shape)
+    break
+```
+
+Always inspect the first batch. The expected model input shape should be visible immediately.
+
+<Quiz client:visible question="A dataset is sorted by class. What behavior might appear if shuffle=False during training?" answer="The model receives long runs from one class, so online or mini-batch gradients swing toward the current class. Training may oscillate or converge poorly." />

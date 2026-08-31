@@ -1,0 +1,53 @@
+---
+title: Make experiments explain themselves
+module: M7 · Training well
+order: 14
+summary: Control randomness, record configuration, and save the evidence needed to distinguish an improvement from a lucky run.
+colab: m7_training_well.ipynb
+concepts: [seed, determinism, checkpoint, experiment tracking]
+duration: 10
+---
+import Quiz from '../../components/Quiz.svelte';
+
+## Reproducible does not mean identical everywhere
+
+Random initialization, data shuffling, augmentation, and parallel kernels can all change results. Seeds control random streams, but hardware and library implementations may still differ.
+
+```python
+import random
+import numpy as np
+import torch
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+```
+
+For strict debugging, PyTorch can request deterministic algorithms, sometimes at a performance cost:
+
+```python
+torch.use_deterministic_algorithms(True)
+```
+
+## Record the experiment, not only the score
+
+At minimum, preserve:
+
+- Code revision and environment versions
+- Random seed and data-split identity
+- Model configuration and parameter count
+- Optimizer, learning-rate schedule, batch size, and epoch count
+- Training and validation curves
+- Best checkpoint and the metric used to select it
+
+A result without its conditions is an anecdote.
+
+## Change one hypothesis at a time
+
+Large sweeps are useful later. Early in a project, controlled comparisons teach more. State the hypothesis—“weight decay will reduce the validation gap”—then change only that factor and compare multiple seeds when the conclusion matters.
+
+<Quiz client:visible question="Two runs with the same seed differ slightly on different GPU models. Does this necessarily indicate a bug?" answer="No. Some parallel floating-point algorithms and kernel selections differ across hardware. Seeds control random choices but do not guarantee bitwise identity across every platform." />

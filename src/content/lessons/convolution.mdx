@@ -1,0 +1,43 @@
+---
+title: A small filter sees everywhere
+module: M6 · Convolution
+order: 11
+summary: Slide one learned kernel across an image to detect the same local pattern at every position.
+colab: m6_convolution.ipynb
+concepts: [convolution, kernel, feature map, receptive field]
+duration: 14
+---
+import ConvVisualizer from '../../components/widgets/ConvVisualizer.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Reuse a local detector
+
+A dense layer treats every pixel position as unrelated. A convolution assumes local patterns matter and can appear anywhere. It slides a small grid of weights—the kernel—over the input and produces one output value at each position.
+
+<ConvVisualizer client:visible />
+
+At each position, multiply overlapping input and kernel values, then sum. PyTorch's `Conv2d` technically computes cross-correlation because it does not flip the kernel, but deep-learning practice still calls the operation convolution.
+
+## Channels in and features out
+
+```python
+import torch.nn as nn
+
+conv = nn.Conv2d(
+    in_channels=3,
+    out_channels=16,
+    kernel_size=3,
+    padding=1,
+)
+```
+
+Each of 16 filters spans all three input channels and has spatial size `3 × 3`. For input `[batch, 3, height, width]`, padding 1 preserves height and width, producing `[batch, 16, height, width]`.
+
+The filters are not hand-authored edge detectors. They start random and learn whichever local features reduce loss. Early layers often learn oriented edges and color contrasts; later layers combine these into larger patterns.
+
+<Callout type="note" title="Output size">
+With stride 1 and no dilation, one spatial dimension becomes `input + 2×padding − kernel + 1`. Padding is therefore part of the model's geometry, not merely an implementation detail.
+</Callout>
+
+<Quiz client:visible question="A 32×32 image uses a 5×5 kernel, stride 1, and no padding. What is the output size?" answer="28×28, because 32 − 5 + 1 = 28 in each spatial dimension." />

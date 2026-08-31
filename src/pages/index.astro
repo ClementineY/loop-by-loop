@@ -1,0 +1,113 @@
+---
+import Base from '../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+import { SITE, moduleDescriptions } from '../config';
+import { withBase } from '../lib/url';
+
+const lessons = (await getCollection('lessons', ({ data }) => !data.draft))
+  .sort((a, b) => a.data.order - b.data.order);
+const groups = new Map<string, typeof lessons>();
+for (const lesson of lessons) {
+  const group = groups.get(lesson.data.module) ?? [];
+  group.push(lesson);
+  groups.set(lesson.data.module, group);
+}
+const first = lessons[0];
+---
+<Base title={`${SITE.name} — Learn PyTorch visually`}>
+  <section class="hero">
+    <div class="eyebrow"><span></span> Open source · No setup required</div>
+    <h1>Neural networks make more sense when you can <em>touch them.</em></h1>
+    <p>{SITE.description}</p>
+    <div class="actions">
+      {first && <a class="button primary" href={withBase(`/lessons/${first.id}`)}>Start with tensors <span>→</span></a>}
+      <a class="button secondary" href={withBase('/experiments')}>Open the experiments</a>
+    </div>
+    <div class="promise" aria-label="Course features">
+      <span><b>16</b> focused lessons</span>
+      <span><b>6</b> interactive labs</span>
+      <span><b>8</b> Colab notebooks</span>
+    </div>
+  </section>
+
+  <section class="demo" aria-labelledby="demo-title">
+    <div class="demo-copy">
+      <p class="kicker">The learning loop</p>
+      <h2 id="demo-title">Build intuition first. Then make it real.</h2>
+      <p>Every core idea moves through three deliberate steps, so syntax arrives after understanding—not before it.</p>
+    </div>
+    <div class="loop-grid">
+      <article><span>01</span><div class="glyph tensor"><i></i><i></i><i></i><i></i></div><h3>See</h3><p>A concise visual model turns abstraction into something concrete.</p></article>
+      <article><span>02</span><div class="glyph curve"><i></i><b></b></div><h3>Touch</h3><p>Change a value and watch shape, gradient, or decision boundary respond.</p></article>
+      <article><span>03</span><div class="glyph code">&gt;_</div><h3>Run</h3><p>Open the matching notebook and execute genuine PyTorch in Colab.</p></article>
+    </div>
+  </section>
+
+  <section class="curriculum" aria-labelledby="curriculum-title">
+    <div class="section-heading">
+      <div><p class="kicker">Curriculum</p><h2 id="curriculum-title">From first tensor to trained model.</h2></div>
+      <p>A compact path through the ideas you actually need. Each module builds on the last.</p>
+    </div>
+    <div class="module-grid">
+      {[...groups.entries()].map(([module, items], index) => (
+        <a class="module-card" href={withBase(`/lessons/${items[0].id}`)}>
+          <div class="module-top"><span>{String(index + 1).padStart(2, '0')}</span><small>{items.length} lessons</small></div>
+          <h3>{module.replace(/^M\d+ · /, '')}</h3>
+          <p>{moduleDescriptions[module] ?? items[0].data.summary}</p>
+          <b>Explore module →</b>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="open-source">
+    <div><p class="kicker">Learn in public</p><h2>A course that gets better when learners become contributors.</h2></div>
+    <div><p>Found a confusing explanation? Have a better example? Every lesson is plain MDX and every simulation has a tested TypeScript core.</p><a href={SITE.repository}>Read the contribution guide <span>↗</span></a></div>
+  </section>
+</Base>
+
+<style>
+  .hero { max-width:1000px; margin:0 auto; padding:7.5rem 1.25rem 6rem; text-align:center; }
+  .eyebrow,.kicker { color:var(--accent); text-transform:uppercase; letter-spacing:.14em; font-size:.72rem; font-weight:800; }
+  .eyebrow { display:flex; justify-content:center; align-items:center; gap:.55rem; }
+  .eyebrow span { width:.45rem; height:.45rem; background:var(--accent); border-radius:50%; box-shadow:0 0 0 5px var(--accent-soft); }
+  h1 { max-width:940px; margin:1.35rem auto 1.25rem; font-size:clamp(3rem,7.5vw,6.6rem); line-height:.93; letter-spacing:-.065em; }
+  h1 em { color:var(--accent); font-style:normal; }
+  .hero>p { max-width:650px; margin:0 auto; font-size:clamp(1.05rem,2vw,1.3rem); color:var(--text-muted); }
+  .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:.75rem; margin:2rem 0 2.4rem; }
+  .button { display:inline-flex; align-items:center; gap:1.1rem; padding:.8rem 1.1rem; border-radius:10px; text-decoration:none; font-weight:720; border:1px solid var(--border); }
+  .button.primary { background:var(--accent); color:white; border-color:var(--accent); box-shadow:0 10px 30px color-mix(in srgb,var(--accent) 18%,transparent); }
+  .button.secondary { background:var(--surface); color:var(--text); }
+  .promise { display:flex; justify-content:center; flex-wrap:wrap; gap:1.5rem; color:var(--text-subtle); font-size:.84rem; }
+  .promise span { display:flex; gap:.35rem; align-items:baseline; } .promise b{color:var(--text);font-size:1.05rem}
+  .demo { background:var(--ink); color:white; padding:6rem max(1.25rem,calc((100vw - 1180px)/2)); }
+  .demo-copy { display:grid; grid-template-columns:1fr 1fr; gap:2rem; align-items:end; margin-bottom:2.5rem; }
+  .demo h2,.curriculum h2,.open-source h2 { margin:.5rem 0 0; border:0; padding:0; font-size:clamp(2rem,4vw,3.5rem); letter-spacing:-.045em; }
+  .demo-copy>p:last-child { color:#aab1c0; max-width:480px; margin:0 0 .4rem auto; }
+  .loop-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#303848; border:1px solid #303848; border-radius:16px; overflow:hidden; }
+  .loop-grid article { background:#171d29; padding:1.5rem; min-height:280px; }
+  .loop-grid article>span { color:#7c879b; font:700 .72rem var(--font-mono); }
+  .loop-grid h3 { font-size:1.35rem; margin:1.2rem 0 .3rem; } .loop-grid p{color:#aab1c0;margin:0;font-size:.9rem}
+  .glyph { height:95px; margin:1.6rem 0 .8rem; position:relative; display:grid; place-items:center; }
+  .tensor { grid-template-columns:repeat(2,43px); gap:5px; transform:rotate(-4deg); }
+  .tensor i { width:43px;height:43px;border:1px solid #68748a;background:#242c3b;border-radius:5px; }
+  .tensor i:nth-child(2){background:var(--accent)}
+  .curve:before { content:''; width:130px;height:65px;border-bottom:2px solid #68748a;border-left:2px solid #68748a; transform:skew(-18deg); }
+  .curve i { position:absolute; width:80px;height:80px;border-bottom:3px solid var(--accent);border-radius:50%;transform:rotate(-12deg); }
+  .curve b { position:absolute;width:12px;height:12px;background:white;border-radius:50%;right:38%;top:44%;box-shadow:0 0 0 6px #ffffff22; }
+  .code { font:700 2rem var(--font-mono); color:var(--accent-light); background:#0e131d; border:1px solid #303848; border-radius:10px; margin-top:1.6rem; }
+  .curriculum { max-width:1180px; margin:0 auto; padding:7rem 1.25rem; }
+  .section-heading { display:grid;grid-template-columns:1.2fr .8fr;gap:2rem;align-items:end;margin-bottom:2.5rem; }
+  .section-heading>p { color:var(--text-muted);margin:0 0 .5rem;max-width:440px; }
+  .module-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem; }
+  .module-card { min-height:240px;padding:1.2rem;background:var(--surface);border:1px solid var(--border);border-radius:14px;text-decoration:none;color:var(--text);display:flex;flex-direction:column;transition:.2s ease; }
+  .module-card:hover { transform:translateY(-4px);border-color:var(--accent);box-shadow:0 12px 36px var(--shadow); }
+  .module-top { display:flex;justify-content:space-between;color:var(--text-subtle);font:650 .72rem var(--font-mono); }
+  .module-card h3 { margin:2.3rem 0 .5rem;font-size:1.25rem;letter-spacing:-.025em; }
+  .module-card p { color:var(--text-muted);font-size:.86rem;line-height:1.55;margin:0 0 1.5rem; }
+  .module-card b { color:var(--accent);font-size:.78rem;margin-top:auto; }
+  .open-source { max-width:1180px;margin:0 auto 2rem;padding:3rem;border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg,var(--surface),var(--accent-soft));display:grid;grid-template-columns:1.2fr .8fr;gap:3rem;align-items:center; }
+  .open-source p { color:var(--text-muted); }.open-source a{font-weight:720;text-decoration:none}
+  @media(max-width:900px){.module-grid{grid-template-columns:repeat(2,1fr)}.loop-grid{grid-template-columns:1fr}.demo-copy,.section-heading,.open-source{grid-template-columns:1fr}.demo-copy>p:last-child{margin:0}.hero{padding-top:5rem}}
+  @media(max-width:520px){.module-grid{grid-template-columns:1fr}.hero{padding:4rem 1rem}.promise{gap:.75rem 1rem}.open-source{padding:1.5rem}}
+</style>

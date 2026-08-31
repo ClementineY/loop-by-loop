@@ -1,0 +1,25 @@
+---
+import Base from '../layouts/Base.astro';
+import { withBase } from '../lib/url';
+---
+<Base title="How to use this course · Loop by Loop" description="Start learning PyTorch without installing anything.">
+  <article class="start container-wide">
+    <p class="eyebrow">Orientation · 3 minutes</p>
+    <h1>Learn in the browser.<br />Run Python in Colab.</h1>
+    <p class="lead">This course separates understanding from setup. The interactive diagrams run here; the real PyTorch code runs in a free Google Colab notebook.</p>
+    <div class="steps">
+      <section><span>1</span><div><h2>Read the mental model</h2><p>Each lesson starts with the smallest useful explanation. Pause at the prediction prompt before moving on.</p></div></section>
+      <section><span>2</span><div><h2>Change the simulation</h2><p>Drag sliders, step backward through a graph, or train a tiny network. Try to make it fail as well as succeed.</p></div></section>
+      <section><span>3</span><div><h2>Run the real code</h2><p>Choose “Run in Colab,” sign in to Google if asked, then press <kbd>Shift</kbd> + <kbd>Enter</kbd> to run each cell.</p></div></section>
+      <section><span>4</span><div><h2>Explain what changed</h2><p>Use the check-your-understanding prompt. If you can predict the result before running it, the idea is becoming yours.</p></div></section>
+    </div>
+    <aside><strong>You do not need a GPU.</strong> Every course example is intentionally small enough for Colab’s free CPU runtime. A GPU only becomes useful near the image-classifier capstone.</aside>
+    <div class="start-actions">
+      <a class="start-button" href={withBase('/lessons/tensors')}>Begin lesson 1: Tensors <span>→</span></a>
+      <a class="experiments-link" href={withBase('/experiments')}>Browse all Colab experiments</a>
+    </div>
+  </article>
+</Base>
+<style>
+  .container-wide{max-width:900px;margin:0 auto;padding:6rem 1.25rem}.eyebrow{color:var(--accent);text-transform:uppercase;letter-spacing:.13em;font-size:.72rem;font-weight:800}.start h1{font-size:clamp(2.8rem,7vw,5.4rem);line-height:.96;letter-spacing:-.055em;margin:1rem 0}.lead{font-size:1.2rem;color:var(--text-muted);max-width:720px}.steps{margin:4rem 0 2rem;border-top:1px solid var(--border)}.steps section{display:grid;grid-template-columns:70px 1fr;gap:1rem;padding:1.7rem 0;border-bottom:1px solid var(--border)}.steps span{font:700 .82rem var(--font-mono);color:var(--accent)}.steps h2{border:0;padding:0;margin:0 0 .35rem;font-size:1.25rem}.steps p{margin:0;color:var(--text-muted)}kbd{background:var(--surface);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:.1rem .35rem;font:600 .8rem var(--font-mono)}aside{background:var(--accent-soft);border-left:3px solid var(--accent);padding:1rem 1.2rem;border-radius:8px;margin:2rem 0}.start-actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}.start-button{display:inline-flex;gap:2rem;background:var(--accent);color:white;text-decoration:none;font-weight:750;padding:.85rem 1.1rem;border-radius:10px}.experiments-link{font-size:.84rem;font-weight:720;text-decoration:none}@media(max-width:600px){.container-wide{padding-top:4rem}.steps section{grid-template-columns:40px 1fr}}
+</style>

@@ -1,0 +1,47 @@
+---
+title: Tensors are data with shape
+module: M1 · Tensors
+order: 1
+summary: "Start with the one object every PyTorch program shares: a rectangular collection of numbers with a shape, type, and device."
+colab: m1_tensors.ipynb
+concepts: [tensor, shape, dtype, device]
+duration: 12
+---
+import TensorPlayground from '../../components/widgets/TensorPlayground.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## The mental model
+
+A tensor is a box of numbers plus a description of how the numbers are arranged. A single number has shape `[]`; a row of five numbers has shape `[5]`; a table with three rows and four columns has shape `[3, 4]`. Add another dimension and you can represent a stack of tables—an image batch, for example.
+
+Shape is not decoration. It determines which operations are possible and what those operations mean. In a batch of 32 RGB images with height and width 64, PyTorch conventionally uses `[32, 3, 64, 64]`: batch, channel, height, width.
+
+<TensorPlayground client:visible />
+
+The lab shows an important distinction: **reshape changes the view, not the values**. A `2 × 3` tensor and a `3 × 2` tensor can share the same six elements. A `2 × 3` tensor cannot become `4 × 2` because that would require inventing two values.
+
+## The real PyTorch
+
+```python
+import torch
+
+x = torch.tensor([[1., 2., 3.],
+                  [4., 5., 6.]])
+
+print(x.shape)   # torch.Size([2, 3])
+print(x.dtype)   # torch.float32
+print(x.device)  # cpu
+print(x.numel()) # 6
+
+y = x.reshape(3, 2)
+print(y)
+```
+
+PyTorch normally infers a tensor's type from its values. Neural-network parameters usually use floating point because gradients are continuous. Class labels are often integers. A device says where the storage and computation live: CPU, CUDA GPU, or Apple Metal (`mps`).
+
+<Callout type="tip" title="Read shapes aloud">
+When debugging, say each dimension's meaning: “32 examples, 3 channels, 64 high, 64 wide.” Named meaning catches mistakes faster than staring at four integers.
+</Callout>
+
+<Quiz client:visible question="Why can a [2, 3] tensor reshape to [6] but not [4, 2]?" answer="Reshape must preserve the number of elements. Both [2, 3] and [6] contain six values; [4, 2] requires eight." />

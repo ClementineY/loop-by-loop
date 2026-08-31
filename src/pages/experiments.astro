@@ -1,0 +1,75 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../config';
+import { experiments } from '../data/experiments';
+import { withBase } from '../lib/url';
+
+const colabUrl = (notebook: string) =>
+  `https://colab.research.google.com/github/${SITE.colabRepository}/blob/main/notebooks/${notebook}`;
+const sourceUrl = (notebook: string) =>
+  `${SITE.repository}/blob/main/notebooks/${notebook}`;
+---
+<Base title="Experiments · Loop by Loop" description="Eight guided PyTorch experiments that run free in Google Colab.">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow"><span></span> Eight runnable notebooks</p>
+      <h1>Make a prediction.<br /><em>Then run the evidence.</em></h1>
+      <p>Each experiment turns one lesson into a small investigation using real PyTorch. No local environment or GPU is required.</p>
+    </div>
+    <aside aria-label="How experiments work">
+      <div><b>01</b><span>Read the question</span></div>
+      <div><b>02</b><span>Predict the result</span></div>
+      <div><b>03</b><span>Run every cell</span></div>
+      <div><b>04</b><span>Change one variable</span></div>
+    </aside>
+  </section>
+
+  <section class="catalog" aria-labelledby="catalog-title">
+    <div class="catalog-head">
+      <div><p class="kicker">Experiment catalog</p><h2 id="catalog-title">One notebook for every module.</h2></div>
+      <p>Work in order for a complete path, or open the experiment that matches the concept you are learning.</p>
+    </div>
+
+    <div class="experiment-grid">
+      {experiments.map((experiment, index) => (
+        <article id={experiment.id}>
+          <div class="card-top">
+            <span>{String(index + 1).padStart(2, '0')}</span>
+            <span class:list={['level', experiment.level.toLowerCase()]}>{experiment.level}</span>
+          </div>
+          <p class="module">{experiment.module}</p>
+          <h3>{experiment.title}</h3>
+          <p class="summary">{experiment.summary}</p>
+          <blockquote>{experiment.question}</blockquote>
+          <ul aria-label="Skills practiced">
+            {experiment.skills.map((skill) => <li>{skill}</li>)}
+          </ul>
+          <div class="meta"><span>≈ {experiment.duration} min</span><span>Free CPU runtime</span></div>
+          <div class="actions">
+            <a class="primary" href={colabUrl(experiment.notebook)} target="_blank" rel="noopener">Open in Colab <span aria-hidden="true">↗</span></a>
+            <a href={sourceUrl(experiment.notebook)}>View notebook source</a>
+          </div>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="workflow">
+    <div><p class="kicker">A good experiment</p><h2>Change one thing.<br />Explain what moved.</h2></div>
+    <div class="rules">
+      <p><span>Predict</span> Write down what you expect before executing the cell.</p>
+      <p><span>Observe</span> Record shapes, loss, gradients, or outputs—not only whether code ran.</p>
+      <p><span>Intervene</span> Change one meaningful value and run again.</p>
+      <p><span>Explain</span> Connect the difference back to the lesson’s mental model.</p>
+    </div>
+  </section>
+
+  <section class="next">
+    <p>New to the course?</p>
+    <a href={withBase('/start')}>See how lessons and experiments fit together <span>→</span></a>
+  </section>
+</Base>
+
+<style>
+  .hero{max-width:1180px;margin:0 auto;padding:6.5rem 1.25rem 5rem;display:grid;grid-template-columns:1.35fr .65fr;gap:5rem;align-items:end}.eyebrow,.kicker{color:var(--accent);text-transform:uppercase;letter-spacing:.13em;font-size:.7rem;font-weight:800}.eyebrow{display:flex;align-items:center;gap:.55rem}.eyebrow span{width:.45rem;height:.45rem;background:var(--accent);border-radius:50%;box-shadow:0 0 0 5px var(--accent-soft)}h1{font-size:clamp(3rem,6.8vw,6rem);line-height:.94;letter-spacing:-.06em;margin:1rem 0 1.2rem}h1 em{font-style:normal;color:var(--accent)}.hero-copy>p:last-child{max-width:650px;color:var(--text-muted);font-size:1.15rem}.hero aside{background:var(--ink);color:white;border-radius:16px;padding:1rem}.hero aside div{display:grid;grid-template-columns:40px 1fr;gap:.7rem;padding:.8rem;border-bottom:1px solid #303848;font-size:.82rem}.hero aside div:last-child{border:0}.hero aside b{font:.7rem var(--font-mono);color:var(--accent-light)}.catalog{background:var(--ink);color:white;padding:6rem max(1.25rem,calc((100vw - 1180px)/2))}.catalog-head{display:grid;grid-template-columns:1.2fr .8fr;gap:3rem;align-items:end;margin-bottom:2.5rem}.catalog h2,.workflow h2{font-size:clamp(2rem,4vw,3.4rem);border:0;margin:.5rem 0 0;padding:0;letter-spacing:-.045em}.catalog-head>p{color:#aab1c0;max-width:450px;margin:0}.experiment-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.8rem}.experiment-grid article{background:#171e2a;border:1px solid #303949;border-radius:14px;padding:1.35rem;display:flex;flex-direction:column;min-height:430px}.card-top{display:flex;justify-content:space-between;color:#808b9e;font:700 .68rem var(--font-mono)}.level{border:1px solid #455064;border-radius:99px;padding:.18rem .45rem;text-transform:uppercase;font-size:.56rem}.level.capstone{border-color:var(--accent);color:var(--accent-light)}.module{color:var(--accent-light);text-transform:uppercase;letter-spacing:.09em;font-size:.64rem;font-weight:780;margin:2rem 0 .3rem}.experiment-grid h3{font-size:1.4rem;margin:.2rem 0 .5rem}.summary{color:#abb4c2;font-size:.87rem;margin:.2rem 0}.experiment-grid blockquote{border-left:2px solid var(--accent);margin:1rem 0;padding:.1rem 0 .1rem .8rem;color:#e2e5ea;font-size:.83rem}.experiment-grid ul{display:flex;flex-wrap:wrap;gap:.35rem;list-style:none;padding:0;margin:.4rem 0 1rem}.experiment-grid li{font:.58rem var(--font-mono);color:#9ba5b5;background:#222b39;border-radius:5px;padding:.25rem .4rem}.meta{display:flex;gap:1rem;color:#7f8a9d;font-size:.63rem;margin-top:auto}.actions{display:flex;align-items:center;gap:1rem;margin-top:1rem;padding-top:1rem;border-top:1px solid #303949}.actions a{color:#bbc3ce;text-decoration:none;font-size:.7rem;font-weight:700}.actions .primary{background:var(--accent);color:white;border-radius:8px;padding:.55rem .7rem}.workflow{max-width:1180px;margin:0 auto;padding:6rem 1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:5rem}.rules{border-top:1px solid var(--border)}.rules p{display:grid;grid-template-columns:90px 1fr;gap:1rem;margin:0;padding:1.1rem 0;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.88rem}.rules span{color:var(--text);font-weight:760}.next{max-width:1180px;margin:0 auto;padding:2rem 1.25rem 4rem;display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--border)}.next p{margin:0;color:var(--text-muted)}.next a{text-decoration:none;font-weight:750}@media(max-width:800px){.hero,.catalog-head,.workflow{grid-template-columns:1fr;gap:2rem}.hero{padding-top:4.5rem}.experiment-grid{grid-template-columns:1fr}}@media(max-width:520px){.actions,.next{align-items:flex-start;flex-direction:column}.experiment-grid article{min-height:0}}
+</style>

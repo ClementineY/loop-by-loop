@@ -1,0 +1,36 @@
+{
+  "name": "loop-by-loop",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "The visual bridge from Python knowledge to a real PyTorch training loop.",
+  "homepage": "https://clementiney.github.io/loop-by-loop/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ClementineY/loop-by-loop.git"
+  },
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "notebooks:verify": "python3 notebooks/verify_notebooks.py",
+    "typecheck": "astro sync && tsc --noEmit",
+    "verify": "npm run test && npm run notebooks:verify && npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^6.0.2",
+    "@astrojs/svelte": "^8.1.2",
+    "astro": "^6.0.0",
+    "svelte": "^5.56.2"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^2.0.0"
+  }
+}

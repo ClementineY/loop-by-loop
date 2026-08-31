@@ -1,0 +1,45 @@
+---
+title: Computation graphs remember the path
+module: M2 · Autograd
+order: 4
+summary: Understand what PyTorch saves during the forward pass, what backward consumes, and when to detach work from the graph.
+colab: m2_autograd.ipynb
+concepts: [computation graph, detach, no_grad, leaf tensor]
+duration: 11
+---
+import AutogradGraph from '../../components/widgets/AutogradGraph.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## A graph made by ordinary code
+
+PyTorch uses a dynamic graph: running tensor operations creates nodes and edges as Python executes. An edge means “this result depends on that value.” The graph can change on every example, which is why regular loops and conditionals work naturally.
+
+<AutogradGraph client:visible />
+
+During the forward pass, operations save just enough context for their backward rule. Multiplication saves its inputs. Tanh saves information needed for `1 - tanh(x)²`. These saved values consume memory, so inference should not build a graph.
+
+```python
+model.eval()
+with torch.no_grad():
+    predictions = model(validation_images)
+```
+
+`torch.no_grad()` temporarily prevents graph recording. It is the normal choice for validation and inference.
+
+## Detach one value
+
+Sometimes most of a calculation should remain differentiable but one value should be treated as a constant:
+
+```python
+teacher_target = teacher(images).detach()
+student_output = student(images)
+loss = torch.nn.functional.mse_loss(student_output, teacher_target)
+```
+
+The student's path remains in the graph. The teacher output shares its data but no longer carries a gradient path back to the teacher.
+
+## Leaves and intermediate values
+
+Parameters are leaf tensors: they were created directly and require gradients. PyTorch retains `.grad` for leaves by default. Intermediate results participate in backpropagation but normally discard their gradients afterward to save memory.
+
+<Quiz client:visible question="Why wrap validation in torch.no_grad() if optimizer.step() is not called anyway?" answer="Without no_grad, PyTorch still records the forward graph and saves intermediate values. Skipping that work makes validation faster and uses less memory." />

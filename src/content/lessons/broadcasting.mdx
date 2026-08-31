@@ -1,0 +1,56 @@
+---
+title: Broadcasting without copying
+module: M1 · Tensors
+order: 2
+summary: Learn the right-to-left shape rule that lets one compact tensor act across an entire batch.
+colab: m1_tensors.ipynb
+concepts: [broadcasting, elementwise operations, dimensions]
+duration: 10
+---
+import TensorPlayground from '../../components/widgets/TensorPlayground.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## One operation, many values
+
+Suppose an image has shape `[3, 64, 64]` and you want to adjust each color channel with three values. Copying each adjustment across 4,096 pixels would waste memory. Broadcasting lets a smaller tensor behave *as if* it were expanded.
+
+Compare shapes from the rightmost dimension. Two dimensions are compatible when they are equal or either one is `1`. Missing dimensions count as `1`.
+
+- `[3, 1] + [1, 4] → [3, 4]`
+- `[5] + [32, 5] → [32, 5]`
+- `[2, 3] + [4, 3, 2] → incompatible`
+
+<TensorPlayground client:visible />
+
+Broadcasting is convenient precisely because it does not materialize all the repeated values. PyTorch uses strides to reuse storage. The result of an operation is real, but the expanded input view can be almost free.
+
+## A practical example
+
+```python
+import torch
+
+# Four examples, three features each
+batch = torch.tensor([
+    [10., 120., 0.1],
+    [12., 100., 0.4],
+    [ 8., 140., 0.2],
+    [11., 110., 0.3],
+])
+
+mean = batch.mean(dim=0)             # shape [3]
+std = batch.std(dim=0).clamp_min(1e-6)
+normalized = (batch - mean) / std    # [4,3] op [3]
+```
+
+The feature statistics have shape `[3]`. PyTorch aligns that dimension with the batch's last dimension and applies the same three statistics to every row.
+
+## The common trap
+
+Broadcasting can make incorrect code *run*. If you accidentally drop a batch dimension, PyTorch may find a compatible expansion rather than report an error. Assert important shapes at module boundaries:
+
+```python
+assert features.ndim == 2
+assert features.shape[1] == 3
+```
+
+<Quiz client:visible question="What shape results from [8, 1, 6] + [7, 6]?" answer="[8, 7, 6]. From the right: 6 matches 6, 1 expands to 7, and the missing leading dimension behaves like 1 and expands to 8." />

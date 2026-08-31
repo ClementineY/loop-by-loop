@@ -1,0 +1,50 @@
+---
+title: A gradient is a sensitivity
+module: M2 · Autograd
+order: 3
+summary: "Treat gradients as answers to a practical question: if this value moves a little, how much will the final result move?"
+colab: m2_autograd.ipynb
+concepts: [gradient, derivative, requires_grad, backward]
+duration: 12
+---
+import AutogradGraph from '../../components/widgets/AutogradGraph.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## The question behind learning
+
+A model contains adjustable numbers called parameters. Training needs to know which direction to move each one. The gradient of the loss with respect to a parameter answers: **if this parameter increases slightly, how does loss change?**
+
+- Positive gradient: increasing the parameter increases loss.
+- Negative gradient: increasing the parameter decreases loss.
+- Large magnitude: loss is sensitive to this parameter here.
+- Near zero: the local surface is flat.
+
+<AutogradGraph client:visible />
+
+Move `x`, `w`, and `b`, then run backward. The output starts with gradient 1 because `dy/dy = 1`. Each operation multiplies the incoming gradient by its own local derivative. That repeated chain rule is reverse-mode automatic differentiation.
+
+## Let PyTorch record the graph
+
+```python
+import torch
+
+x = torch.tensor(2.0)
+w = torch.tensor(-1.0, requires_grad=True)
+b = torch.tensor(0.5, requires_grad=True)
+
+y = (x * w + b) ** 2
+y.backward()
+
+print(y.item()) # 2.25
+print(w.grad)   # -6.0
+print(b.grad)   # -3.0
+```
+
+Only `w` and `b` need gradients because they are parameters we plan to update. PyTorch records operations involving them, then `backward()` traverses the graph in reverse.
+
+<Callout type="warn" title="Gradients accumulate">
+Calling `backward()` adds into each parameter's `.grad`; it does not replace it. Training loops clear gradients before the next batch with `optimizer.zero_grad()`.
+</Callout>
+
+<Quiz client:visible question="If a parameter's gradient is -4, which direction should gradient descent move it?" answer="Upward. Gradient descent subtracts the gradient, so p ← p - learning_rate × (-4) increases p. That is the local direction expected to reduce loss." />

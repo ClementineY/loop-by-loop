@@ -1,0 +1,38 @@
+---
+import { getCollection } from 'astro:content';
+import { withBase } from '../lib/url';
+interface Props { currentSlug: string; }
+const { currentSlug } = Astro.props;
+const lessons = (await getCollection('lessons', ({ data }) => !data.draft))
+  .sort((a, b) => a.data.order - b.data.order);
+const groups = new Map<string, typeof lessons>();
+for (const l of lessons) {
+  const g = groups.get(l.data.module) ?? [];
+  g.push(l);
+  groups.set(l.data.module, g);
+}
+---
+<nav class="sidebar" aria-label="Lessons">
+  {[...groups.entries()].map(([mod, items]) => (
+    <details open={items.some((l) => l.id === currentSlug)} class="mod">
+      <summary>{mod}</summary>
+      <ul>
+        {items.map((l) => (
+          <li class={l.id === currentSlug ? 'active' : ''}>
+            <a href={withBase(`/lessons/${l.id}`)}>{l.data.title}</a>
+          </li>
+        ))}
+      </ul>
+    </details>
+  ))}
+</nav>
+<style>
+  .sidebar { font-size:.82rem; }
+  .mod { border-bottom:1px solid var(--border); padding:.35rem 0; }
+  .mod summary { font-weight:760; cursor:pointer; padding:.55rem .35rem; color:var(--text-muted); }
+  .mod ul { list-style:none; margin:0 0 .5rem; padding:0; }
+  .mod li { padding:.12rem 0; }
+  .mod li a { display:block;text-decoration:none;color:var(--text-muted);padding:.4rem .55rem;border-radius:7px; }
+  .mod li a:hover { color:var(--accent); }
+  .mod li.active a { font-weight:750;color:var(--text);background:var(--accent-soft); }
+</style>

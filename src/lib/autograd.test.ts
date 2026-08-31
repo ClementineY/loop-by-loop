@@ -18,6 +18,19 @@ describe('scalar autograd', () => {
     expect(x.grad).toBeCloseTo(-1); // df/dx = w
     expect(b.grad).toBeCloseTo(1);
   });
+  it('explains the full graph y = (x*w+b)^2 at the lab defaults', () => {
+    const x = V(2), w = V(-1), b = V(0.5);
+    const m = x.mul(w);
+    const s = m.add(b);
+    const y = s.pow(2);
+    y.backward();
+    expect(y.grad).toBeCloseTo(1);
+    expect(s.grad).toBeCloseTo(-3);
+    expect(m.grad).toBeCloseTo(-3);
+    expect(b.grad).toBeCloseTo(-3);
+    expect(x.grad).toBeCloseTo(3);
+    expect(w.grad).toBeCloseTo(-6);
+  });
   it('relu blocks gradient when input < 0', () => {
     const a = V(-2);
     const r = a.relu();

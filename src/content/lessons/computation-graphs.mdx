@@ -16,6 +16,8 @@ PyTorch uses a dynamic graph: running tensor operations creates nodes and edges 
 
 <AutogradGraph client:visible />
 
+The gradient at an addition does **branch**, but it does not get divided between the inputs. For `s = m + b`, both local derivatives are 1: moving either `m` or `b` by one unit moves `s` by one unit. Each parent therefore receives the full upstream gradient. If several downstream paths later meet at the same value, those separate gradient contributions are added together.
+
 During the forward pass, operations save just enough context for their backward rule. Multiplication saves its inputs. Tanh saves information needed for `1 - tanh(x)²`. These saved values consume memory, so inference should not build a graph.
 
 ```python

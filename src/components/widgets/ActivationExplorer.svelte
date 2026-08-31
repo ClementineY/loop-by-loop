@@ -1,22 +1,29 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { relu, sigmoid, tanh, leakyRelu, dRelu, dSigmoid, dTanh, dLeakyRelu } from '../../lib/activations';
-  let canvas: HTMLCanvasElement;
   let activation = 'relu';
   let x = 0.5;
-  const funcs: Record<string,(n:number)=>number> = { relu, sigmoid, tanh, leakyRelu };
-  const derivs: Record<string,(n:number)=>number> = { relu:dRelu, sigmoid:dSigmoid, tanh:dTanh, leakyRelu:dLeakyRelu };
-  $: value = funcs[activation](+x);
-  $: derivative = derivs[activation](+x);
-  $: if (canvas) draw();
-  function draw(){const ctx=canvas.getContext('2d');if(!ctx)return;const d=devicePixelRatio||1,w=canvas.clientWidth,h=260;canvas.width=w*d;canvas.height=h*d;ctx.scale(d,d);ctx.clearRect(0,0,w,h);ctx.strokeStyle='#687181';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.moveTo(w/2,0);ctx.lineTo(w/2,h);ctx.stroke();ctx.strokeStyle=getComputedStyle(canvas).getPropertyValue('--accent')||'#df5b35';ctx.lineWidth=3;ctx.beginPath();for(let px=0;px<w;px++){const vx=(px/w)*12-6;const vy=funcs[activation](vx);const py=h/2-vy*34;px?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.stroke();const px=((+x+6)/12)*w,py=h/2-value*34;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#df5b35';ctx.lineWidth=3;ctx.stroke();}
-  onMount(draw);
+  const funcs:Record<string,(n:number)=>number>={relu,sigmoid,tanh,leakyRelu};
+  const derivs:Record<string,(n:number)=>number>={relu:dRelu,sigmoid:dSigmoid,tanh:dTanh,leakyRelu:dLeakyRelu};
+  const names:Record<string,string>={relu:'ReLU',sigmoid:'Sigmoid',tanh:'Tanh',leakyRelu:'Leaky ReLU'};
+  const formulas:Record<string,string>={relu:'max(0, x)',sigmoid:'1 / (1 + e⁻ˣ)',tanh:'(eˣ − e⁻ˣ) / (eˣ + e⁻ˣ)',leakyRelu:'max(0.01x, x)'};
+  const px=(n:number)=>42+((n+6)/12)*476;
+  const py=(n:number)=>(activation==='relu'||activation==='leakyRelu')?235-n*34:145-n*90;
+  $: value=funcs[activation](+x); $: derivative=derivs[activation](+x);
+  $: survival=Math.abs(derivative)**6;
+  $: curve=Array.from({length:121},(_,i)=>{const n=-6+i/10;return `${i?'L':'M'} ${px(n).toFixed(1)} ${py(funcs[activation](n)).toFixed(1)}`}).join(' ');
+  $: tangentLeft=Math.max(-6,+x-1); $: tangentRight=Math.min(6,+x+1);
 </script>
 <section class="lab" aria-labelledby="act-title">
-  <div class="head"><div><span>Interactive lab</span><h3 id="act-title">Activation explorer</h3></div><select bind:value={activation} aria-label="Activation function"><option value="relu">ReLU</option><option value="sigmoid">Sigmoid</option><option value="tanh">Tanh</option><option value="leakyRelu">Leaky ReLU</option></select></div>
-  <canvas bind:this={canvas} aria-label={`${activation} activation curve with x ${x}`}></canvas>
-  <div class="readout"><label>x = <strong>{(+x).toFixed(1)}</strong><input type="range" min="-6" max="6" step="0.1" bind:value={x}/></label><div><small>output</small><b>{value.toFixed(3)}</b></div><div><small>local slope</small><b>{derivative.toFixed(3)}</b></div></div>
+  <header><div><span>Activation lab</span><h3 id="act-title">What passes forward—and backward?</h3></div><select bind:value={activation} aria-label="Activation function"><option value="relu">ReLU</option><option value="sigmoid">Sigmoid</option><option value="tanh">Tanh</option><option value="leakyRelu">Leaky ReLU</option></select></header>
+  <div class="formula"><strong>{names[activation]}</strong><code>f(x) = {formulas[activation]}</code><span>f({(+x).toFixed(1)}) = {value.toFixed(3)}</span></div>
+  <div class="plot"><svg viewBox="0 0 560 290" role="img" aria-label={`${names[activation]} curve at x ${x}`}>
+    <line class="axis" x1="35" y1={py(0)} x2="525" y2={py(0)}/><line class="axis" x1="280" y1="20" x2="280" y2="270"/>
+    <path class="curve" d={curve}/><line class="tangent" x1={px(tangentLeft)} y1={py(value+derivative*(tangentLeft-x))} x2={px(tangentRight)} y2={py(value+derivative*(tangentRight-x))}/><circle cx={px(+x)} cy={py(value)} r="7"/>
+    <text x={Math.min(px(+x)+12,430)} y={Math.max(py(value)-12,22)}>local slope {derivative.toFixed(3)}</text>
+  </svg></div>
+  <div class="controls"><label>x <b>{(+x).toFixed(1)}</b><input type="range" min="-6" max="6" step="0.1" bind:value={x}/></label><article><small>forward output</small><b>{value.toFixed(3)}</b></article><article><small>local slope</small><b>{derivative.toFixed(3)}</b></article><article><small>after 6 identical slopes</small><b>{survival.toExponential(2)}×</b></article></div>
+  <footer>The gray curve, orange tangent, formula, output, and slope all come from the selected function. Change the menu and verify that every representation changes together.</footer>
 </section>
 <style>
-  .lab{margin:2rem 0;padding:1rem;border:1px solid var(--border);border-radius:14px;background:var(--ink);color:white;--accent:#df5b35}.head{display:flex;justify-content:space-between;align-items:center}.head span{font:800 .61rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent-light)}.head h3{margin:.2rem 0;font-size:1.1rem}.head select{background:#222a38;color:white;border:1px solid #3a4455;border-radius:8px;padding:.45rem}.lab canvas{display:block;width:100%;height:260px;margin:1rem 0;background:#151c28;border-radius:10px}.readout{display:grid;grid-template-columns:2fr 1fr 1fr;gap:1rem;align-items:end}.readout label{display:grid;grid-template-columns:auto 1fr;gap:.2rem .6rem;color:#aab1c0;font-size:.75rem}.readout label input{grid-column:1/-1;accent-color:var(--accent)}.readout>div{display:flex;flex-direction:column;border-left:1px solid #394253;padding-left:1rem}.readout small{font-size:.62rem;color:#8f99aa;text-transform:uppercase}.readout b{font:700 1.1rem var(--font-mono);color:var(--accent-light)}@media(max-width:560px){.readout{grid-template-columns:1fr 1fr}.readout label{grid-column:1/-1}}
+  .lab{margin:2rem 0;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden}header{display:flex;justify-content:space-between;align-items:center;padding:1rem}header span{font:800 .6rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}header h3{margin:.2rem 0 0}header select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:.45rem}.formula{display:flex;align-items:center;gap:1rem;padding:.7rem 1rem;border-block:1px solid var(--border);background:var(--accent-soft)}.formula strong{color:var(--accent)}.formula span{margin-left:auto;font:650 .7rem var(--font-mono)}.plot{padding:.5rem 1rem;background:#121925}.plot svg{display:block;width:100%}.axis{stroke:#455064}.curve{fill:none;stroke:#738095;stroke-width:3}.tangent{stroke:var(--accent-light);stroke-width:3}.plot circle{fill:var(--accent);stroke:#ffd0bf;stroke-width:2}.plot text{fill:var(--accent-light);font:10px var(--font-mono)}.controls{display:grid;grid-template-columns:1.5fr repeat(3,1fr);gap:1rem;padding:.8rem 1rem}.controls label{display:grid;grid-template-columns:1fr auto;color:var(--text-muted);font-size:.68rem}.controls input{grid-column:1/-1;accent-color:var(--accent)}.controls article{border-left:1px solid var(--border);padding-left:.8rem}.controls small{display:block;color:var(--text-muted);font-size:.55rem}.controls article b{font:700 .86rem var(--font-mono)}footer{padding:.7rem 1rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.68rem}@media(max-width:650px){header,.formula{align-items:flex-start;flex-direction:column}.formula span{margin:0}.controls{grid-template-columns:1fr 1fr}.controls label{grid-column:1/-1}}
 </style>

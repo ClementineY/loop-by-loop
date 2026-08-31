@@ -10,15 +10,13 @@ duration: 12
 import ActivationExplorer from '../../components/widgets/ActivationExplorer.svelte';
 import Quiz from '../../components/Quiz.svelte';
 
-## Why linear is not enough
+## Which activation should sit between layers?
 
-Two linear transformations in sequence are still one linear transformation. Without something nonlinear between layers, a hundred layers cannot create a curved decision boundary.
-
-An activation function changes each intermediate value independently. That small bend gives the whole network the ability to approximate complex functions.
+The previous lesson established why a bend is necessary. Now compare what each activation sends forward and what its local slope sends backward. Change both the function and `x`; the formula, curve, tangent, output, and six-layer gradient multiplier update together.
 
 <ActivationExplorer client:visible />
 
-Watch both output and local slope. Backpropagation multiplies gradients by that slope:
+Backpropagation multiplies the incoming gradient by the local slope:
 
 - **ReLU** is fast and keeps a slope of 1 for positive inputs, but blocks gradients for negative inputs.
 - **Sigmoid** maps to `(0, 1)`, useful for a binary probability output, but saturates at both ends.

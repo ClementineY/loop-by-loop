@@ -1,16 +1,16 @@
 ---
-title: Turn gradients into movement
+title: How large should one step be?
 module: M3 · Optimization
 order: 5
-summary: Use the learning rate to turn sensitivity into a controlled parameter update—and see why bigger is not always faster.
+summary: Use the learning rate to turn a good direction into a controlled update—and see exactly when a quadratic begins to oscillate or diverge.
 colab: m3_optimization.ipynb
-concepts: [gradient descent, learning rate, momentum, loss]
+concepts: [gradient descent, learning rate, convergence, loss]
 duration: 12
 ---
 import GradientDescent from '../../components/widgets/GradientDescent.svelte';
 import Quiz from '../../components/Quiz.svelte';
 
-## The update rule
+## Why not take the biggest downhill step possible?
 
 Gradient descent repeats one small operation:
 
@@ -22,15 +22,15 @@ The gradient points uphill, so subtracting it points downhill. The learning rate
 
 <GradientDescent client:visible />
 
-Try learning rates `0.03`, `0.2`, `0.8`, and `1.05`. On this simple quadratic loss, values below 1 converge and values above 1 diverge. Real loss surfaces have different curvature in different directions, so there is no universal safe value.
+Try learning rates `0.03`, `0.2`, `0.8`, `1.0`, and `1.05`. On this quadratic, values below 1 converge, exactly 1 flips sides forever, and values above 1 diverge. Real loss surfaces have different curvature in different directions, so there is no universal safe value.
 
-## Use an optimizer
+## What does PyTorch update?
 
 ```python
 optimizer = torch.optim.SGD(
     model.parameters(),
     lr=0.05,
-    momentum=0.9,
+    momentum=0.0,
 )
 
 optimizer.zero_grad()
@@ -38,10 +38,10 @@ loss.backward()
 optimizer.step()
 ```
 
-Momentum keeps a moving direction. Consistent gradients build velocity; noisy changes partly cancel. It can cross shallow bumps but can also overshoot. Adam adds per-parameter adaptive scaling and is often a forgiving starting point, but SGD remains valuable because its behavior is simple to reason about.
+`step()` reads each parameter's `.grad` and applies the optimizer's update rule under `no_grad`. It does not recompute the loss. The next forward pass reveals whether the new parameters helped.
 
-## Loss is the compass
+## Why does the safe rate depend on the surface?
 
-The optimizer does not know what “good predictions” mean. The loss function turns model behavior into one scalar. Classification commonly uses cross-entropy; regression often uses mean squared error. A mismatched loss can make an otherwise correct training loop learn the wrong objective.
+For `loss = p²`, one update is `p ← (1 − 2η)p`. Convergence requires the multiplier's magnitude to be below one, so `0 < η < 1`. A different curvature changes that interval. Real networks contain many curvatures at once, which is why a rate stable in one direction can oscillate in another.
 
 <Quiz client:visible question="The training loss alternates between smaller and much larger values. What is the first hyperparameter you would inspect?" answer="The learning rate. Large oscillations commonly mean updates are overshooting. Lower it before changing model architecture." />

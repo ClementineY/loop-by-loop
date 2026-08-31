@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relu, sigmoid, tanh, leakyRelu, dRelu, dSigmoid } from './activations';
+import { relu, sigmoid, tanh, leakyRelu, dRelu, dSigmoid, dTanh, dLeakyRelu } from './activations';
 
 describe('activations', () => {
   it('relu', () => {
@@ -18,6 +18,11 @@ describe('activations', () => {
   it('derivatives', () => {
     expect(dRelu(3)).toBe(1);
     expect(dRelu(-3)).toBe(0);
+    expect(dRelu(0)).toBe(0);
     expect(dSigmoid(0)).toBeCloseTo(0.25);
+    expect(dTanh(0)).toBeCloseTo(1);
+    expect(dTanh(6)).toBeLessThan(0.0001);
+    expect(dLeakyRelu(-3)).toBeCloseTo(0.01);
+    expect(dLeakyRelu(0)).toBeCloseTo(0.01);
   });
 });

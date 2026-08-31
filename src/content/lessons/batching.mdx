@@ -8,10 +8,15 @@ concepts: [DataLoader, batch, shuffle, workers]
 duration: 10
 ---
 import Quiz from '../../components/Quiz.svelte';
+import BatchGradientLab from '../../components/widgets/BatchGradientLab.svelte';
 
 ## Why batches exist
 
 One example produces a noisy gradient and underuses vector hardware. The entire dataset produces a stable gradient but may not fit in memory and updates only once per epoch. A mini-batch balances both.
+
+<BatchGradientLab client:visible />
+
+Each example can favor a different update. The batch gradient is their average. Shuffle to change which examples vote, then increase batch size and watch the estimate approach the full-data gradient.
 
 ```python
 from torch.utils.data import DataLoader

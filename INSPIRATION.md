@@ -11,6 +11,7 @@ Loop by Loop sits between an interactive visualization and an executable textboo
 - [Neural Nets](https://github.com/NAME0x0/neural-nets) demonstrates a browser-native curriculum where equations, plain-language explanations, and direct-manipulation experiments reinforce one another.
 - [PyTorch Neural Network Simulation](https://github.com/romizone/pytorch) explores live training, weight inspection, and the generation of corresponding PyTorch code.
 - [Neuromatch Academy's Gradient Descent and AutoGrad tutorial](https://deeplearning.neuromatch.io/tutorials/W1D2_LinearDeepLearning/student/W1D2_Tutorial1.html) demonstrates a productive sequence from computational graphs and `requires_grad` to backward propagation and a complete training iteration.
+- [Neuromatch Academy's Optimization Techniques tutorial](https://deeplearning.neuromatch.io/tutorials/W1D4_Optimization/student/W1D4_Tutorial1.html) motivates optimization through high-dimensional random search, poor conditioning, momentum, minibatch gradients, and adaptive methods.
 
 ## What this project does differently
 

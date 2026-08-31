@@ -1,0 +1,47 @@
+---
+title: How momentum builds velocity
+module: M3 · Optimization
+order: 5.5
+summary: Separate the current gradient from stored velocity and see why momentum helps in narrow, poorly conditioned valleys.
+colab: m3_optimization.ipynb
+concepts: [momentum, velocity, conditioning, SGD]
+duration: 11
+---
+import MomentumLab from '../../components/widgets/MomentumLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Why does gradient descent zigzag?
+
+A loss surface can be steep across a valley and shallow along it. One learning rate must serve both directions. A large rate bounces across the narrow walls; a small rate crawls along the valley floor. This mismatch is called poor conditioning.
+
+<MomentumLab client:visible />
+
+## What is momentum remembering?
+
+Momentum stores an exponentially fading sum of previous gradients:
+
+```text
+velocity  ← β × velocity + gradient
+parameter ← parameter − learning_rate × velocity
+```
+
+When a gradient component keeps the same sign, it accumulates in velocity. When it alternates sign across a valley, successive contributions cancel. Momentum therefore damps some zigzag while accelerating sustained movement.
+
+```python
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=0.05,
+    momentum=0.9,
+)
+```
+
+## Is momentum always better?
+
+No. Velocity can carry the parameters past a minimum or into an unstable region. The learning rate and momentum coefficient interact: increasing `β` without reconsidering `lr` can make overshoot worse.
+
+<Callout type="note" title="A checkpoint includes velocity">
+Momentum buffers live inside `optimizer.state_dict()`. Saving only model weights preserves the location but forgets the motion, so resumed training follows a different trajectory.
+</Callout>
+
+<Quiz client:visible question="Why can momentum speed movement along a valley while reducing side-to-side zigzag?" answer="Gradients along the valley tend to keep the same sign and accumulate in velocity. Gradients across a narrow valley often flip sign, so their stored contributions partly cancel." />

@@ -56,14 +56,25 @@ def main() -> None:
         code("x = torch.tensor(3.)\nteacher_w = torch.tensor(2., requires_grad=True)\nstudent_w = torch.tensor(1., requires_grad=True)\nteacher_prediction = teacher_w * x\ntarget = teacher_prediction.detach()\nstudent_prediction = student_w * x\nloss = (student_prediction - target).pow(2)\nloss.backward()\nprint('target:', target.item(), 'loss:', loss.item())\nprint('student grad:', student_w.grad.item())\nprint('teacher grad:', teacher_w.grad)  # None: detach cut this route"),
         markdown("## Try it\nRemove `.detach()`, rebuild the tensors, and run again. Predict the teacher gradient before printing it. Then wrap both model calls in `torch.no_grad()` and inspect `requires_grad` on their outputs."),
     ])
-    build("m3_optimization.ipynb", "M3 · Optimization", "Fit a small curve with a complete training loop.", "How does the learning rate change convergence?", [
+    build("m3_optimization.ipynb", "M3 · Optimization", "Compare search directions, learning rates, and momentum before fitting a model.", "Which information makes an update efficient and stable?", [
+        markdown("## 1 · Random directions versus the gradient\nOn a quadratic, compare equal-length moves. As dimension grows, a random unit vector is usually poorly aligned with the negative gradient."),
+        code("torch.manual_seed(7)\nfor dimension in [2, 10, 100, 1000]:\n    w = torch.ones(dimension) / dimension**0.5\n    directions = torch.randn(120, dimension)\n    directions = directions / directions.norm(dim=1, keepdim=True)\n    random_change = 0.1 * (directions @ w) + 0.5 * 0.1**2\n    gradient_change = 0.5 * (1 - 0.1)**2 - 0.5\n    print(dimension, 'random best:', random_change.min().item(), 'gradient:', gradient_change)"),
+        markdown("## 2 · Learning rate and momentum\nInspect the gradient and the stored velocity separately. Predict the next parameter before running the loop."),
+        code("p = torch.tensor(1.0)\nvelocity = torch.tensor(0.0)\nlr, beta = 0.1, 0.9\nfor step in range(3):\n    gradient = p.clone()       # gradient of 1/2 p²\n    velocity = beta * velocity + gradient\n    p = p - lr * velocity\n    print(step + 1, 'gradient:', gradient.item(), 'velocity:', velocity.item(), 'p:', p.item())"),
+        markdown("## 3 · Put the optimizer inside a training loop"),
         code("x = torch.linspace(-2, 2, 80).unsqueeze(1)\ny = 1.5*x - .3 + .15*torch.randn_like(x)\nmodel = torch.nn.Linear(1, 1)\nloss_fn = torch.nn.MSELoss()\noptimizer = torch.optim.SGD(model.parameters(), lr=.08)"),
         code("for epoch in range(80):\n    optimizer.zero_grad()\n    loss = loss_fn(model(x), y)\n    loss.backward()\n    optimizer.step()\nprint('loss:', loss.item())\nprint('weight:', model.weight.item(), 'bias:', model.bias.item())"),
     ])
-    build("m4_networks.ipynb", "M4 · Neural networks", "Build and inspect an nn.Module.", "Where does each trainable value live?", [
+    build("m4_networks.ipynb", "M4 · Neural networks", "See why activations matter, then build and inspect an nn.Module.", "What changes forward values and what controls backward slopes?", [
+        markdown("## 1 · A linear stack still collapses\nVerify that two affine transformations equal one affine transformation, then insert ReLU and compare."),
+        code("x = torch.linspace(-2, 2, 9)\nw1, b1, w2, b2 = 1.4, 0.2, -1.1, 0.4\nstacked = w2 * (w1*x + b1) + b2\ncollapsed = (w2*w1)*x + (w2*b1 + b2)\nbent = w2 * torch.relu(w1*x + b1) + b2\nprint('linear stack matches:', torch.allclose(stacked, collapsed))\nprint('linear:', stacked)\nprint('with ReLU:', bent)"),
+        markdown("## 2 · Forward value and local slope\nUse autograd to compare how much gradient survives at several inputs."),
+        code("for name, fn in [('ReLU', torch.relu), ('sigmoid', torch.sigmoid), ('tanh', torch.tanh)]:\n    x = torch.tensor([-6., 0., 6.], requires_grad=True)\n    y = fn(x)\n    y.sum().backward()\n    print(name, 'output:', y.detach().tolist(), 'slope:', x.grad.tolist())"),
+        markdown("## 3 · Package the layers"),
         code("class TinyNet(torch.nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.layers = torch.nn.Sequential(\n            torch.nn.Linear(2, 8), torch.nn.Tanh(), torch.nn.Linear(8, 1)\n        )\n    def forward(self, x):\n        return self.layers(x).squeeze(-1)\n\nmodel = TinyNet()\nprint(model)\nprint('parameters:', sum(p.numel() for p in model.parameters()))"),
     ])
-    build("m5_data.ipynb", "M5 · Data", "Create a Dataset and inspect shuffled batches.", "What changes when shuffle or batch size changes?", [
+    build("m5_data.ipynb", "M5 · Data", "Create a Dataset, inspect shuffled batches, and measure gradient noise.", "How does batch size change the gradient estimate?", [
+        code("example_gradients = torch.tensor([-6., -4., -2., -1., 0., 1., 3., 4., 5., 6., 8., 10.])\nprint('full-data gradient:', example_gradients.mean().item())\nfor batch_size in [1, 2, 4, 12]:\n    print(batch_size, 'example batch estimate:', example_gradients[:batch_size].mean().item())"),
         code("from torch.utils.data import TensorDataset, DataLoader\nX = torch.randn(100, 2)\ny = (X[:, 0] + X[:, 1] > 0).long()\ndataset = TensorDataset(X, y)\nloader = DataLoader(dataset, batch_size=16, shuffle=True)\nfeatures, labels = next(iter(loader))\nprint(features.shape, labels.shape)\nprint(labels.bincount(minlength=2))"),
     ])
     build("m6_convolution.ipynb", "M6 · Convolution", "Track shapes through a small CNN.", "Can you write the complete shape story without running the cell?", [

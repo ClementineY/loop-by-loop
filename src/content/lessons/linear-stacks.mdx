@@ -1,0 +1,41 @@
+---
+title: Can more linear layers make a bend?
+module: M4 · Neural networks
+order: 6.75
+summary: Compose two learned linear transformations, collapse them algebraically, then insert one activation and watch a bend appear.
+colab: m4_networks.ipynb
+concepts: [linear layer, composition, nonlinearity, ReLU]
+duration: 8
+---
+import LinearStackLab from '../../components/widgets/LinearStackLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## What does depth add by itself?
+
+A linear layer scales, mixes, and shifts values. Two such layers still collapse into one:
+
+```text
+h = w₁x + b₁
+y = w₂h + b₂
+  = (w₂w₁)x + (w₂b₁ + b₂)
+```
+
+Move every weight and bias below. With no activation the result changes slope and position, but it remains a straight line.
+
+<LinearStackLab client:visible />
+
+## Where does a network's flexibility come from?
+
+An activation between layers prevents that algebraic collapse. ReLU creates different linear regions on either side of zero. More hidden units create more possible bends; more layers compose those regions into richer shapes.
+
+```python
+block = nn.Sequential(
+    nn.Linear(1, 8),
+    nn.ReLU(),
+    nn.Linear(8, 1),
+)
+```
+
+The next lesson compares activation functions not only by their forward shape, but by the gradients they pass backward.
+
+<Quiz client:visible question="A network contains ten Linear layers but no activation functions. Can it represent a curved function of its input?" answer="No. The composition of affine transformations is another affine transformation. Depth adds parameters and computation, but no nonlinear bend until an activation or another nonlinear operation is inserted." />

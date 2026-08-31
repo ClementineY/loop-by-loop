@@ -1,0 +1,38 @@
+---
+title: Why gradients beat random directions
+module: M3 · Optimization
+order: 4.5
+summary: Compare one direction chosen from derivatives with many blind guesses, then watch the gap grow with parameter count.
+colab: m3_optimization.ipynb
+concepts: [gradient descent, random search, high dimensions, direction]
+duration: 9
+---
+import DirectionSearch from '../../components/widgets/DirectionSearch.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Why not perturb the parameters randomly?
+
+Random search is a reasonable baseline: choose a direction, take a small step, and keep it if the loss falls. The problem is not that random directions can never help. The problem is that a neural network may have millions of dimensions, and a random arrow is usually almost perpendicular to the direction that matters.
+
+The lab uses the same step length for every move on `loss = ½‖w‖²`. The histogram shows 120 random moves; the orange line is one move directly opposite the gradient.
+
+<DirectionSearch client:visible />
+
+## What information does the gradient buy us?
+
+For each parameter, a partial derivative measures one local sensitivity. Put all those sensitivities into one vector and it points in the direction of steepest local increase. Its negative is therefore the steepest local decrease for a sufficiently small step.
+
+```python
+optimizer.zero_grad()
+loss.backward()       # measure all partial derivatives together
+optimizer.step()      # move in the informed direction
+```
+
+Random search spends forward passes evaluating guesses. Backpropagation reuses the recorded computation graph to obtain all parameter derivatives in roughly the cost scale of a small number of model evaluations.
+
+<Callout type="note" title="Local, not magical">
+The negative gradient is the best infinitesimal direction, not a guarantee for an arbitrarily large jump. Curvature is why the learning rate still matters.
+</Callout>
+
+<Quiz client:visible question="Can a random direction reduce loss? If so, why not use random search?" answer="Yes, some guesses point partly downhill. But in high dimensions most random directions have very little alignment with the gradient, so their progress is small or unreliable. Backpropagation constructs an informed direction from all local sensitivities at once." />

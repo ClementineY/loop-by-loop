@@ -1,50 +1,59 @@
 ---
-title: A gradient is a sensitivity
+title: Autograd records the route
 module: M2 · Autograd
 order: 3
-summary: "Treat gradients as answers to a practical question: if this value moves a little, how much will the final result move?"
+summary: See how requires_grad, the forward graph, backward, and zero_grad form one repeatable lifecycle.
 colab: m2_autograd.ipynb
-concepts: [gradient, derivative, requires_grad, backward]
-duration: 12
+concepts: [requires_grad, grad_fn, backward, gradient accumulation]
+duration: 11
 ---
 import AutogradGraph from '../../components/widgets/AutogradGraph.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
-## The question behind learning
+## PyTorch remembers how the answer was made
 
-A model contains adjustable numbers called parameters. Training needs to know which direction to move each one. The gradient of the loss with respect to a parameter answers: **if this parameter increases slightly, how does loss change?**
+Now that a gradient has a concrete meaning, the next question is how PyTorch obtains it. The forward pass leaves a trail of the operations that produced the loss.
 
-- Positive gradient: increasing the parameter increases loss.
-- Negative gradient: increasing the parameter decreases loss.
-- Large magnitude: loss is sensitive to this parameter here.
-- Near zero: the local surface is flat.
+Use the four steps below in order. Watch which objects appear, where gradients are stored, and what gets cleared for the next batch.
 
 <AutogradGraph client:visible />
 
-Move `x`, `w`, and `b`, then run backward. The output starts with gradient 1 because `dy/dy = 1`. Each operation multiplies the incoming gradient by its own local derivative. That repeated chain rule is reverse-mode automatic differentiation.
-
-## Let PyTorch record the graph
+## Read the trail in real PyTorch
 
 ```python
 import torch
 
-x = torch.tensor(2.0)
-w = torch.tensor(-1.0, requires_grad=True)
-b = torch.tensor(0.5, requires_grad=True)
+x = torch.tensor(2.0)                         # input: no gradient needed
+w = torch.tensor(-1.0, requires_grad=True)    # leaf parameter
+b = torch.tensor(0.5, requires_grad=True)     # leaf parameter
 
-y = (x * w + b) ** 2
-y.backward()
+loss = (x * w + b) ** 2                       # forward: graph is recorded
+print(loss.grad_fn)                            # <PowBackward...>
 
-print(y.item()) # 2.25
-print(w.grad)   # -6.0
-print(b.grad)   # -3.0
+loss.backward()                               # backward: fill leaf .grad
+print(w.grad, b.grad)                          # tensor(-6.), tensor(-3.)
 ```
 
-Only `w` and `b` need gradients because they are parameters we plan to update. PyTorch records operations involving them, then `backward()` traverses the graph in reverse.
+Three object properties tell most of the story:
 
-<Callout type="warn" title="Gradients accumulate">
-Calling `backward()` adds into each parameter's `.grad`; it does not replace it. Training loops clear gradients before the next batch with `optimizer.zero_grad()`.
+- `requires_grad`: should operations involving this tensor be recorded?
+- `grad_fn`: which recorded operation created this result?
+- `.grad`: the accumulated answer for a leaf tensor after `backward()`.
+
+## The lifecycle inside every training loop
+
+```python
+optimizer.zero_grad()   # 1. clear answers from the previous batch
+loss = loss_fn(model(x), target)  # 2. run forward and record a new graph
+loss.backward()         # 3. measure each parameter's effect on loss
+optimizer.step()        # 4. use those measurements to update parameters
+```
+
+M2 focuses on the first three lines. The next module turns the fourth line into learning.
+
+<Callout type="warn" title="Why clear gradients?">
+`backward()` adds into each leaf's `.grad`. That is useful when intentionally combining several mini-batches, but an ordinary training iteration calls `optimizer.zero_grad()` before measuring the next one.
 </Callout>
 
-<Quiz client:visible question="If a parameter's gradient is -4, which direction should gradient descent move it?" answer="Upward. Gradient descent subtracts the gradient, so p ← p - learning_rate × (-4) increases p. That is the local direction expected to reduce loss." />
+<Quiz client:visible question="After the forward pass, loss.grad_fn exists but w.grad is still None. What is missing?" answer="The backward pass. The forward pass records how loss was produced; loss.backward() traverses that record and fills gradients on the leaf parameters." />

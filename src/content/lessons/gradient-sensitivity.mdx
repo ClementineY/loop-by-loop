@@ -1,0 +1,52 @@
+---
+title: A gradient is a measure of sensitivity
+module: M2 · Autograd
+order: 2.5
+summary: Build an intuition for gradient sign and size by nudging one parameter and watching the loss respond.
+colab: m2_autograd.ipynb
+concepts: [gradient, sensitivity, slope, finite difference]
+duration: 8
+---
+import SensitivityLab from '../../components/widgets/SensitivityLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Ask a local “what if?” question
+
+Suppose `w` is one adjustable number inside a model. Its gradient answers:
+
+> If `w` increases by a tiny amount, how sensitive is the loss to that change?
+
+Move `w` below. The orange line is the local slope PyTorch reports as the gradient. Compare its prediction with the loss change caused by a real `+0.10` nudge.
+
+<SensitivityLab client:visible />
+
+## Read the sign before the formula
+
+- A **negative** gradient says a small increase in `w` will decrease the loss.
+- A **positive** gradient says a small increase in `w` will increase the loss.
+- A gradient near **zero** says the loss is locally insensitive to `w`.
+- A larger absolute value means a stronger local response.
+
+The gradient is local. It describes the curve near the current value; it does not promise that the same slope continues far away.
+
+## Let PyTorch measure it
+
+```python
+import torch
+
+w = torch.tensor(0.5, requires_grad=True)
+loss = (2 * w - 3) ** 2
+loss.backward()
+
+print(loss.item())  # 4.0
+print(w.grad)        # tensor(-8.)
+```
+
+At `w = 0.5`, the negative gradient means increasing `w` slightly should reduce the loss. The next page shows how PyTorch records the calculation so it can obtain that answer.
+
+<Callout type="tip" title="Sensitivity is not the loss">
+The loss is the curve's height. The gradient is its slope at one point. A high loss can have a small gradient, and a low loss can still have a nonzero gradient.
+</Callout>
+
+<Quiz client:visible question="The gradient of loss with respect to w is +6. What should happen after a tiny increase in w?" answer="The loss should increase by approximately 6 times the size of the nudge. For a +0.01 nudge, the local estimate is a +0.06 loss change." />

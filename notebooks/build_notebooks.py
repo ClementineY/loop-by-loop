@@ -47,9 +47,14 @@ def main() -> None:
         code("# Broadcasting: center each feature across the batch\nmean = x.mean(dim=0)\ncentered = x - mean\nprint('mean shape:', mean.shape)\nprint(centered)"),
         markdown("## Try it\nChange the reshape target. Before running, decide whether the element count is preserved."),
     ])
-    build("m2_autograd.ipynb", "M2 · Autograd", "Inspect a dynamic graph and its gradients.", "Can you derive the gradients before autograd reveals them?", [
-        code("x = torch.tensor(2.)\nw = torch.tensor(-1., requires_grad=True)\nb = torch.tensor(.5, requires_grad=True)\ny = (x*w + b)**2\ny.backward()\nprint('y:', y.item(), 'dw:', w.grad.item(), 'db:', b.grad.item())"),
-        code("# Gradients accumulate\ny = (x*w + b)**2\ny.backward()\nprint('after a second backward, dw:', w.grad.item())\nw.grad.zero_(); b.grad.zero_()"),
+    build("m2_autograd.ipynb", "M2 · Autograd", "Inspect the autograd lifecycle and control where gradients stop.", "Which leaves will receive gradients, and which route will detach remove?", [
+        markdown("## 1 · Record a forward trail\nOnly the values that may learn need `requires_grad=True`. Inspect `is_leaf` and `grad_fn` before calling backward."),
+        code("x = torch.tensor(2.)\nw = torch.tensor(-1., requires_grad=True)\nb = torch.tensor(.5, requires_grad=True)\nloss = (x*w + b)**2\nprint('w is leaf:', w.is_leaf, 'w.grad:', w.grad)\nprint('loss is leaf:', loss.is_leaf, 'loss.grad_fn:', loss.grad_fn)"),
+        markdown("## 2 · Walk backward and clear the answers\nThe graph is recorded during forward; `.backward()` fills gradients on the leaves."),
+        code("loss.backward()\nprint('loss:', loss.item(), 'dw:', w.grad.item(), 'db:', b.grad.item())\nw.grad.zero_(); b.grad.zero_()\nprint('after clearing:', w.grad.item(), b.grad.item())"),
+        markdown("## 3 · Detach one branch\nThe two modes produce the same forward values. Compare which parameters receive gradients."),
+        code("x = torch.tensor(3.)\nteacher_w = torch.tensor(2., requires_grad=True)\nstudent_w = torch.tensor(1., requires_grad=True)\nteacher_prediction = teacher_w * x\ntarget = teacher_prediction.detach()\nstudent_prediction = student_w * x\nloss = (student_prediction - target).pow(2)\nloss.backward()\nprint('target:', target.item(), 'loss:', loss.item())\nprint('student grad:', student_w.grad.item())\nprint('teacher grad:', teacher_w.grad)  # None: detach cut this route"),
+        markdown("## Try it\nRemove `.detach()`, rebuild the tensors, and run again. Predict the teacher gradient before printing it. Then wrap both model calls in `torch.no_grad()` and inspect `requires_grad` on their outputs."),
     ])
     build("m3_optimization.ipynb", "M3 · Optimization", "Fit a small curve with a complete training loop.", "How does the learning rate change convergence?", [
         code("x = torch.linspace(-2, 2, 80).unsqueeze(1)\ny = 1.5*x - .3 + .15*torch.randn_like(x)\nmodel = torch.nn.Linear(1, 1)\nloss_fn = torch.nn.MSELoss()\noptimizer = torch.optim.SGD(model.parameters(), lr=.08)"),

@@ -1,150 +1,124 @@
 <script lang="ts">
   import { V } from '../../lib/autograd';
 
-  let x = 2;
-  let w = -1;
-  let b = 0.5;
-  let backward = false;
+  let phase = 0;
+  const phases = ['Track leaves', 'Run forward', 'Run backward', 'Clear gradients'];
 
-  $: graph = build(+x, +w, +b, backward);
+  $: graph = build(phase >= 2);
 
-  function build(xn: number, wn: number, bn: number, run: boolean) {
-    const xv = V(xn);
-    const wv = V(wn);
-    const bv = V(bn);
-    const m = xv.mul(wv);
-    const s = m.add(bv);
-    const y = s.pow(2);
-    if (run) y.backward();
-    return { x: xv, w: wv, b: bv, m, s, y };
+  function build(run: boolean) {
+    const x = V(2);
+    const w = V(-1);
+    const b = V(0.5);
+    const m = x.mul(w);
+    const s = m.add(b);
+    const loss = s.pow(2);
+    if (run) loss.backward();
+    if (phase === 3) { w.grad = 0; b.grad = 0; }
+    return { x, w, b, m, s, loss };
   }
 
   const f = (value: number) => value.toFixed(2);
-  function changed() { backward = false; }
+  const next = () => { phase = (phase + 1) % phases.length; };
 </script>
 
-<section class="lab" aria-labelledby="auto-title">
-  <div class="head">
-    <div>
-      <span>Interactive lab</span>
-      <h3 id="auto-title">Follow the gradient</h3>
-      <code>m = x·w &nbsp;→&nbsp; s = m+b &nbsp;→&nbsp; y = s²</code>
+<section class="lab" aria-labelledby="autograd-title">
+  <header>
+    <div><span>Autograd lifecycle</span><h3 id="autograd-title">Watch PyTorch build and use the tape</h3></div>
+    <button onclick={next}>{phase === 3 ? 'Start again ↻' : 'Next step →'}</button>
+  </header>
+
+  <nav aria-label="Autograd lifecycle steps">
+    {#each phases as label, index}
+      <button class:active={phase === index} class:done={phase > index} onclick={() => phase = index}>
+        <b>{index + 1}</b><span>{label}</span>
+      </button>
+    {/each}
+  </nav>
+
+  <div class="workspace">
+    <div class="program" aria-label="PyTorch code for the current lifecycle">
+      <p class:active={phase === 0}><i>1</i><code>w = torch.tensor(-1., <mark>requires_grad=True</mark>)</code></p>
+      <p class:active={phase === 0}><i>2</i><code>b = torch.tensor(.5, <mark>requires_grad=True</mark>)</code></p>
+      <p class:active={phase === 1}><i>3</i><code>loss = (x * w + b) ** 2</code></p>
+      <p class:active={phase === 2}><i>4</i><code>loss.backward()</code></p>
+      <p class:active={phase === 3}><i>5</i><code>w.grad.zero_(); b.grad.zero_()</code></p>
     </div>
-    <button onclick={() => backward = true}>Run backward →</button>
+
+    <aside aria-live="polite">
+      {#if phase === 0}
+        <span>01 · choose leaves</span>
+        <h4>Track only what may learn.</h4>
+        <p><code>w</code> and <code>b</code> are user-created leaves. Turning on <code>requires_grad</code> tells PyTorch to remember operations that depend on them.</p>
+      {:else if phase === 1}
+        <span>02 · ordinary Python runs</span>
+        <h4>The forward pass leaves a trail.</h4>
+        <p>Each result stores the operation that created it. The final loss points backward through <code>Pow → Add → Mul</code>.</p>
+      {:else if phase === 2}
+        <span>03 · ask one question</span>
+        <h4>How would each leaf change loss?</h4>
+        <p><code>backward()</code> walks the saved trail in reverse. The answers land in <code>w.grad</code> and <code>b.grad</code>.</p>
+      {:else}
+        <span>04 · prepare the next batch</span>
+        <h4>Clear the answers, not the parameters.</h4>
+        <p>PyTorch adds new gradients to old ones. The training loop clears <code>.grad</code> before measuring the next batch.</p>
+      {/if}
+    </aside>
   </div>
 
-  <div class="sliders">
-    <label>x <b>{x}</b><input type="range" min="-3" max="3" step=".5" bind:value={x} oninput={changed}/></label>
-    <label>w <b>{w}</b><input type="range" min="-3" max="3" step=".5" bind:value={w} oninput={changed}/></label>
-    <label>b <b>{b}</b><input type="range" min="-2" max="2" step=".5" bind:value={b} oninput={changed}/></label>
-  </div>
-
-  <div class="forward" aria-label="Forward computation in three steps">
-    <article>
-      <div class="step-head"><b>1</b><span>multiply</span></div>
-      <div class="equation">
-        <span class="value">x <strong>{f(graph.x.data)}</strong></span>
-        <i>×</i>
-        <span class="value">w <strong>{f(graph.w.data)}</strong></span>
-        <i>=</i>
-        <span class="value result">m <strong>{f(graph.m.data)}</strong></span>
-      </div>
-      {#if backward}<p>grad m = {f(graph.m.grad)}</p>{/if}
-    </article>
-
-    <article>
-      <div class="step-head"><b>2</b><span>add</span></div>
-      <div class="equation">
-        <span class="value">m <strong>{f(graph.m.data)}</strong></span>
-        <i>+</i>
-        <span class="value">b <strong>{f(graph.b.data)}</strong></span>
-        <i>=</i>
-        <span class="value result">s <strong>{f(graph.s.data)}</strong></span>
-      </div>
-      {#if backward}<p>grad s = {f(graph.s.grad)}</p>{/if}
-    </article>
-
-    <article class="output">
-      <div class="step-head"><b>3</b><span>square</span></div>
-      <div class="equation">
-        <span class="value">s <strong>{f(graph.s.data)}</strong></span>
-        <i>²</i>
-        <i>=</i>
-        <span class="value result">y <strong>{f(graph.y.data)}</strong></span>
-      </div>
-      {#if backward}<p>grad y = {f(graph.y.grad)} (the seed)</p>{/if}
-    </article>
-  </div>
-
-  {#if backward}
-    <div class="trace" aria-live="polite">
-      <div class="trace-head">
-        <div><span>Backward trace</span><h4>Right to left, one local rule at a time</h4></div>
-        <p><code>grad(parent) = grad(result) × local derivative</code></p>
-      </div>
-
-      <ol>
-        <li>
-          <b>Seed the output</b>
-          <p>Start with <code>grad y = ∂y/∂y = 1.00</code>.</p>
-        </li>
-        <li>
-          <b>Undo the square</b>
-          <p>The local derivative of <code>y = s²</code> is <code>2s = {f(2 * graph.s.data)}</code>.</p>
-          <code>grad s = 1.00 × {f(2 * graph.s.data)} = {f(graph.s.grad)}</code>
-        </li>
-        <li class="branch">
-          <b>Branch through the addition</b>
-          <p>For <code>s = m + b</code>, changing either input by 1 changes <code>s</code> by 1. Both local derivatives are therefore 1.</p>
-          <div>
-            <code>grad m = {f(graph.s.grad)} × 1 = {f(graph.m.grad)}</code>
-            <code>grad b = {f(graph.s.grad)} × 1 = {f(graph.b.grad)}</code>
-          </div>
-          <strong>The gradient branches; it does not divide. Gradients measure sensitivity, not a conserved quantity.</strong>
-        </li>
-        <li>
-          <b>Undo the multiplication</b>
-          <p>For <code>m = x·w</code>, the local derivative toward <code>x</code> is <code>w</code>, and toward <code>w</code> it is <code>x</code>.</p>
-          <div>
-            <code>grad x = {f(graph.m.grad)} × {f(graph.w.data)} = {f(graph.x.grad)}</code>
-            <code>grad w = {f(graph.m.grad)} × {f(graph.x.data)} = {f(graph.w.grad)}</code>
-          </div>
-        </li>
-      </ol>
+  <div class="graph" class:backward={phase === 2} class:cleared={phase === 3} aria-label="Recorded computation graph">
+    <div class="leaves">
+      <article class="plain"><small>input · not tracked</small><b>x</b><strong>{f(graph.x.data)}</strong></article>
+      <article class="tracked"><small>leaf · requires_grad</small><b>w</b><strong>{f(graph.w.data)}</strong>{#if phase >= 2}<em>.grad {f(graph.w.grad)}</em>{/if}</article>
+      <article class="tracked"><small>leaf · requires_grad</small><b>b</b><strong>{f(graph.b.data)}</strong>{#if phase >= 2}<em>.grad {f(graph.b.grad)}</em>{/if}</article>
     </div>
-  {:else}
-    <p class="caption">Read the three forward equations first. Then predict the signs of the gradients and run backward.</p>
+
+    <div class="arrow"><i>→</i><small>{phase === 0 ? 'not run yet' : 'record'}</small></div>
+
+    <div class="operations" class:hidden={phase === 0}>
+      <article><small>MulBackward</small><b>m = x·w</b><strong>{f(graph.m.data)}</strong></article>
+      <i>→</i>
+      <article><small>AddBackward</small><b>s = m+b</b><strong>{f(graph.s.data)}</strong></article>
+      <i>→</i>
+      <article class="loss"><small>PowBackward</small><b>loss = s²</b><strong>{f(graph.loss.data)}</strong>{#if phase === 2}<em>seed 1.00</em>{/if}</article>
+    </div>
+  </div>
+
+  {#if phase === 2}
+    <div class="backward-strip" aria-label="Backward pass summary">
+      <span><b>square</b><code>1 × 2s → −3</code></span>
+      <i>←</i>
+      <span><b>add</b><code>−3 × 1 → m:−3, b:−3</code></span>
+      <i>←</i>
+      <span><b>multiply</b><code>w.grad:−6 · x path:3</code></span>
+    </div>
   {/if}
+
+  <footer><b>{phase + 1} / 4</b><p>{phases[phase]}</p></footer>
 </section>
 
 <style>
-  .lab{margin:2rem 0;padding:1rem;border:1px solid var(--border);border-radius:14px;background:var(--surface);overflow:hidden}
-  .head{display:flex;justify-content:space-between;align-items:center;gap:1rem}
-  .head span,.trace-head span{font:800 .61rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
-  .head h3{margin:.2rem 0}.head code{font-size:.72rem;color:var(--text-muted)}
-  .head button{border:0;border-radius:8px;background:var(--accent);color:white;padding:.55rem .7rem;font-weight:750;font-size:.75rem}
-  .sliders{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1rem 0}
-  .sliders label{display:grid;grid-template-columns:1fr auto;font-size:.7rem;color:var(--text-muted)}
-  .sliders input{grid-column:1/-1;accent-color:var(--accent)}
-  .forward{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#344052;border:1px solid #344052;border-radius:11px;overflow:hidden}
-  .forward article{background:var(--ink);color:white;padding:.8rem;min-width:0}
-  .forward article.output{background:#2d211e}
-  .step-head{display:flex;align-items:center;gap:.45rem;color:#929dae;font:700 .6rem var(--font-mono);text-transform:uppercase;letter-spacing:.08em}
-  .step-head b{display:grid;place-items:center;width:1.25rem;height:1.25rem;border-radius:50%;background:#2d3747;color:white}
-  .equation{display:flex;align-items:center;justify-content:center;gap:.28rem;margin:.8rem 0 .35rem}
-  .equation i{font-style:normal;color:#8994a5;font:700 .75rem var(--font-mono)}
-  .value{display:grid;gap:.1rem;min-width:42px;padding:.35rem;border:1px solid #3a4556;border-radius:6px;color:#98a3b4;font:600 .57rem var(--font-mono)}
-  .value strong{color:white;font-size:.72rem}.value.result{border-color:var(--accent);background:#35241f}
-  .forward article>p{margin:.55rem 0 0;color:var(--accent-light);font:700 .65rem var(--font-mono);text-align:center}
-  .trace{margin-top:1rem;border:1px solid var(--border);border-radius:11px;overflow:hidden}
-  .trace-head{display:flex;justify-content:space-between;gap:1rem;align-items:end;padding:.85rem;background:var(--bg)}
-  .trace-head h4{margin:.15rem 0 0;font-size:.9rem}.trace-head p{margin:0;color:var(--text-muted);font-size:.65rem}
-  .trace ol{list-style:none;counter-reset:trace;margin:0;padding:0}
-  .trace li{display:grid;grid-template-columns:145px 1fr;gap:.25rem 1rem;padding:.8rem;border-top:1px solid var(--border);font-size:.75rem}
-  .trace li>b{grid-row:1/4;color:var(--text)}.trace li>p{margin:0;color:var(--text-muted)}
-  .trace li>code,.trace li div{grid-column:2}.trace li div{display:flex;flex-wrap:wrap;gap:.5rem}
-  .trace li code{font-size:.68rem}.trace li>strong{grid-column:2;color:var(--accent);font-size:.7rem}
-  .caption{color:var(--text-muted);font-size:.75rem;margin:.7rem .2rem 0}
-  @media(max-width:700px){.forward{grid-template-columns:1fr}.trace-head{display:block}.trace li{grid-template-columns:1fr}.trace li>b{grid-row:auto}.trace li>code,.trace li div,.trace li>strong{grid-column:1}}
-  @media(max-width:520px){.sliders{grid-template-columns:1fr}.head{align-items:flex-start}.head code{display:none}}
+  .lab{margin:2rem 0;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden}
+  header{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem}
+  header span,aside>span{font:800 .61rem var(--font-mono);text-transform:uppercase;letter-spacing:.11em;color:var(--accent)}
+  header h3{margin:.2rem 0 0}header button{border:0;border-radius:8px;background:var(--accent);color:white;padding:.58rem .8rem;font-weight:750;font-size:.75rem}
+  nav{display:grid;grid-template-columns:repeat(4,1fr);border-block:1px solid var(--border);background:var(--bg)}
+  nav button{display:flex;align-items:center;gap:.45rem;border:0;border-right:1px solid var(--border);padding:.65rem;background:transparent;color:var(--text-muted);font-size:.68rem;text-align:left}
+  nav button:last-child{border-right:0}nav b{display:grid;place-items:center;width:1.25rem;height:1.25rem;border:1px solid var(--border);border-radius:50%;font:700 .57rem var(--font-mono)}
+  nav button.active{background:var(--surface);color:var(--text);box-shadow:inset 0 -2px var(--accent)}nav button.active b,nav button.done b{background:var(--accent);border-color:var(--accent);color:white}
+  .workspace{display:grid;grid-template-columns:1.4fr 1fr;border-bottom:1px solid var(--border)}
+  .program{background:var(--code-bg);padding:.8rem 0;color:white;overflow:auto}.program p{display:flex;margin:0;padding:.42rem .8rem;opacity:.46;white-space:nowrap}.program p.active{opacity:1;background:#ffffff0d;box-shadow:inset 3px 0 var(--accent)}
+  .program i{width:1.8rem;color:#647084;font:normal .62rem var(--font-mono)}.program code{font-size:.67rem;background:transparent;padding:0}.program mark{background:transparent;color:var(--accent-light)}
+  aside{padding:1rem;background:var(--bg)}aside h4{margin:.25rem 0 .45rem;font-size:.95rem}aside p{margin:0;color:var(--text-muted);font-size:.75rem;line-height:1.55}
+  .graph{display:flex;align-items:center;gap:.7rem;padding:1rem;background:#121925;color:white;overflow:auto}
+  .leaves{display:grid;grid-template-columns:repeat(3,92px);gap:.4rem}.graph article{position:relative;display:grid;grid-template-columns:1fr auto;gap:.2rem;padding:.55rem;border:1px solid #354052;border-radius:8px;background:#1b2432;min-height:58px}
+  .graph article small{grid-column:1/-1;color:#8d98aa;font:.53rem var(--font-mono)}.graph article b{font:700 .68rem var(--font-mono)}.graph article strong{font:800 .73rem var(--font-mono)}.graph article em{grid-column:1/-1;color:var(--accent-light);font:normal .58rem var(--font-mono)}
+  .graph article.tracked{border-color:#6b4b40}.graph article.plain{opacity:.65}.arrow{display:grid;place-items:center;color:#7f8a9b;font-style:normal}.arrow small{font:.5rem var(--font-mono)}
+  .operations{display:flex;align-items:center;gap:.35rem;transition:opacity .25s}.operations.hidden{opacity:.18}.operations article{min-width:104px}.operations>i{color:#707c8f;font-style:normal}.operations .loss{border-color:var(--accent);background:#34241f}
+  .graph.backward .operations>i{color:var(--accent-light)}.graph.cleared .operations{opacity:.36}
+  .backward-strip{display:grid;grid-template-columns:1fr auto 1.3fr auto 1fr;align-items:center;gap:.5rem;padding:.7rem;background:var(--accent-soft);border-top:1px solid var(--border)}
+  .backward-strip span{display:grid;gap:.12rem}.backward-strip b{font-size:.65rem}.backward-strip code{font-size:.58rem;background:transparent;padding:0;color:var(--text-muted)}.backward-strip i{font-style:normal;color:var(--accent)}
+  footer{display:flex;align-items:center;gap:.5rem;padding:.55rem 1rem;color:var(--text-muted);font-size:.65rem}footer b{color:var(--accent);font-family:var(--font-mono)}footer p{margin:0}
+  @media(max-width:720px){nav{grid-template-columns:1fr 1fr}.workspace{grid-template-columns:1fr}.graph{display:block}.arrow{margin:.5rem}.operations{min-width:390px}.backward-strip{grid-template-columns:1fr}.backward-strip i{transform:rotate(90deg);justify-self:center}}
+  @media(max-width:520px){header{align-items:flex-start}.leaves{grid-template-columns:repeat(3,82px)}nav button span{font-size:.6rem}}
 </style>

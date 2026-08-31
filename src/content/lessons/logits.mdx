@@ -1,0 +1,36 @@
+---
+title: Why should the network return logits?
+module: M4 · Neural networks
+order: 8.5
+summary: Turn relative class scores into probabilities and cross-entropy without putting softmax inside the model.
+colab: m4_networks.ipynb
+concepts: [logits, softmax, cross entropy, output layer]
+duration: 9
+---
+import LogitLab from '../../components/widgets/LogitLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## What does the final linear layer mean?
+
+For classification, each output is a **logit**: an unrestricted score for one class. A logit is not a probability. Its meaning comes from comparison with the other class scores.
+
+<LogitLab client:visible />
+
+## Where should softmax happen?
+
+`CrossEntropyLoss` accepts logits and internally combines a stable log-softmax with negative log likelihood:
+
+```python
+logits = model(images)               # [batch, classes]
+loss = nn.CrossEntropyLoss()(logits, labels)
+predictions = logits.argmax(dim=1)
+```
+
+Do not put `Softmax` at the end of the model before this loss. Keeping raw logits avoids duplicated work and numerical instability.
+
+<Callout type="note" title="Binary outputs have two common forms">
+Use one logit with `BCEWithLogitsLoss`, or two logits with `CrossEntropyLoss`. Both are valid; the output shape and target encoding must match the chosen loss.
+</Callout>
+
+<Quiz client:visible question="Adding 100 to every class logit leaves softmax probabilities unchanged. Why?" answer="Softmax depends on score differences. Its stable implementation subtracts a common reference before exponentiating, so a shared offset cancels." />

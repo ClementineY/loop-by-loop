@@ -9,8 +9,9 @@ duration: 11
 ---
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
+import SplitLab from '../../components/widgets/SplitLab.svelte';
 
-## One example at an index
+## Who is responsible for one example?
 
 A `Dataset` answers two questions: how many examples exist, and what is example `i`? It does not decide batch size or shuffle order.
 
@@ -32,7 +33,13 @@ class PointDataset(Dataset):
 
 This boundary is useful because storage can change without changing training. `__getitem__` might index a tensor, open an image on disk, decode audio, or fetch a cached record.
 
-## Transform at the boundary
+## Which information may cross split boundaries?
+
+<SplitLab client:visible />
+
+Training data may teach parameters and preprocessing statistics. Validation data may guide choices. Test data should remain untouched until the final estimate.
+
+## Where should transformations happen?
 
 Training transforms should create plausible variations without changing the label: a small crop might preserve “cat,” while flipping a handwritten digit can change its identity. Validation transforms must be deterministic so metrics mean the same thing each run.
 
@@ -48,7 +55,7 @@ train_transform = transforms.Compose([
 Statistics such as normalization means must be computed from the training split only. Using validation data leaks information into training and makes evaluation optimistic.
 </Callout>
 
-## Inspect before training
+## What should you inspect before training?
 
 Check several examples and print their shape, range, type, and label. Many “model” failures are actually swapped dimensions, values scaled incorrectly, or labels encoded differently from the loss function's expectation.
 

@@ -45,6 +45,7 @@ def main() -> None:
     build("m1_tensors.ipynb", "M1 · Tensors", "Predict and verify tensor shapes.", "Can you predict every result shape before PyTorch prints it?", [
         code("x = torch.arange(6, dtype=torch.float32).reshape(2, 3)\nprint(x)\nprint('shape:', x.shape, 'dtype:', x.dtype, 'elements:', x.numel())"),
         code("# Broadcasting: center each feature across the batch\nmean = x.mean(dim=0)\ncentered = x - mean\nprint('mean shape:', mean.shape)\nprint(centered)"),
+        code("# Name axes before reducing them\nimages = torch.randn(8, 3, 32, 32)\nchannel_means = images.mean(dim=(0, 2, 3))\nprint('images:', images.shape, 'one mean per channel:', channel_means.shape)"),
         markdown("## Try it\nChange the reshape target. Before running, decide whether the element count is preserved."),
     ])
     build("m2_autograd.ipynb", "M2 · Autograd", "Inspect the autograd lifecycle and control where gradients stop.", "Which leaves will receive gradients, and which route will detach remove?", [
@@ -66,26 +67,36 @@ def main() -> None:
         code("for epoch in range(80):\n    optimizer.zero_grad()\n    loss = loss_fn(model(x), y)\n    loss.backward()\n    optimizer.step()\nprint('loss:', loss.item())\nprint('weight:', model.weight.item(), 'bias:', model.bias.item())"),
     ])
     build("m4_networks.ipynb", "M4 · Neural networks", "See why activations matter, then build and inspect an nn.Module.", "What changes forward values and what controls backward slopes?", [
-        markdown("## 1 · A linear stack still collapses\nVerify that two affine transformations equal one affine transformation, then insert ReLU and compare."),
+        markdown("## 1 · One neuron: weighted votes, bias, activation\nInspect every contribution before assembling whole layers."),
+        code("x = torch.tensor([1.5, -1.0])\nw = torch.tensor([0.8, -0.4])\nb = torch.tensor(0.2)\nz = x @ w + b\noutput = torch.relu(z)\nprint('contributions:', x*w, 'z:', z.item(), 'output:', output.item())"),
+        markdown("## 2 · A linear stack still collapses\nVerify that two affine transformations equal one affine transformation, then insert ReLU and compare."),
         code("x = torch.linspace(-2, 2, 9)\nw1, b1, w2, b2 = 1.4, 0.2, -1.1, 0.4\nstacked = w2 * (w1*x + b1) + b2\ncollapsed = (w2*w1)*x + (w2*b1 + b2)\nbent = w2 * torch.relu(w1*x + b1) + b2\nprint('linear stack matches:', torch.allclose(stacked, collapsed))\nprint('linear:', stacked)\nprint('with ReLU:', bent)"),
-        markdown("## 2 · Forward value and local slope\nUse autograd to compare how much gradient survives at several inputs."),
+        markdown("## 3 · Forward value and local slope\nUse autograd to compare how much gradient survives at several inputs."),
         code("for name, fn in [('ReLU', torch.relu), ('sigmoid', torch.sigmoid), ('tanh', torch.tanh)]:\n    x = torch.tensor([-6., 0., 6.], requires_grad=True)\n    y = fn(x)\n    y.sum().backward()\n    print(name, 'output:', y.detach().tolist(), 'slope:', x.grad.tolist())"),
-        markdown("## 3 · Package the layers"),
+        markdown("## 4 · Package the layers"),
         code("class TinyNet(torch.nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.layers = torch.nn.Sequential(\n            torch.nn.Linear(2, 8), torch.nn.Tanh(), torch.nn.Linear(8, 1)\n        )\n    def forward(self, x):\n        return self.layers(x).squeeze(-1)\n\nmodel = TinyNet()\nprint(model)\nprint('parameters:', sum(p.numel() for p in model.parameters()))"),
+        markdown("## 5 · Logits belong with a stable loss\nVerify that a shared offset changes neither probabilities nor cross-entropy."),
+        code("logits = torch.tensor([[1.2, -0.3], [101.2, 99.7]])\nprobs = logits.softmax(dim=1)\nprint(probs)\nprint('same probabilities:', torch.allclose(probs[0], probs[1]))\nprint('loss:', torch.nn.functional.cross_entropy(logits[:1], torch.tensor([0])).item())"),
     ])
     build("m5_data.ipynb", "M5 · Data", "Create a Dataset, inspect shuffled batches, and measure gradient noise.", "How does batch size change the gradient estimate?", [
         code("example_gradients = torch.tensor([-6., -4., -2., -1., 0., 1., 3., 4., 5., 6., 8., 10.])\nprint('full-data gradient:', example_gradients.mean().item())\nfor batch_size in [1, 2, 4, 12]:\n    print(batch_size, 'example batch estimate:', example_gradients[:batch_size].mean().item())"),
-        code("from torch.utils.data import TensorDataset, DataLoader\nX = torch.randn(100, 2)\ny = (X[:, 0] + X[:, 1] > 0).long()\ndataset = TensorDataset(X, y)\nloader = DataLoader(dataset, batch_size=16, shuffle=True)\nfeatures, labels = next(iter(loader))\nprint(features.shape, labels.shape)\nprint(labels.bincount(minlength=2))"),
+        code("from torch.utils.data import TensorDataset, DataLoader, random_split\nX = torch.randn(100, 2)\ny = (X[:, 0] + X[:, 1] > 0).long()\ndataset = TensorDataset(X, y)\ntrain_set, val_set, test_set = random_split(dataset, [70, 15, 15])\nloader = DataLoader(train_set, batch_size=16, shuffle=True)\nfeatures, labels = next(iter(loader))\nprint('splits:', len(train_set), len(val_set), len(test_set))\nprint(features.shape, labels.shape)"),
     ])
     build("m6_convolution.ipynb", "M6 · Convolution", "Track shapes through a small CNN.", "Can you write the complete shape story without running the cell?", [
         code("model = torch.nn.Sequential(\n    torch.nn.Conv2d(3, 16, 3, padding=1),\n    torch.nn.ReLU(),\n    torch.nn.MaxPool2d(2),\n    torch.nn.Conv2d(16, 32, 3, padding=1),\n    torch.nn.ReLU(),\n    torch.nn.AdaptiveAvgPool2d(1),\n    torch.nn.Flatten(),\n    torch.nn.Linear(32, 10),\n)\nimages = torch.randn(8, 3, 32, 32)\nprint(model(images).shape)"),
+        code("conv = torch.nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)\nfeature_maps = conv(torch.randn(8, 3, 32, 32))\nprint('feature maps:', feature_maps.shape)\nprint('conv parameters:', sum(p.numel() for p in conv.parameters()))  # 448"),
     ])
     build("m7_training_well.ipynb", "M7 · Training well", "Compare training and validation behavior reproducibly.", "What must be fixed before two runs are comparable?", [
         code("import random, numpy as np\nseed = 42\nrandom.seed(seed); np.random.seed(seed); torch.manual_seed(seed)\nprint('seeded:', seed)"),
+        markdown("## Diagnose with two curves\nTraining loss asks whether the model can fit; validation loss asks whether that fit transfers. Preserve the checkpoint at the best validation epoch, not necessarily the final epoch."),
         markdown("## Experiment record\nWrite down your hypothesis, code revision, data split, seed, model size, optimizer, learning rate, batch size, and both training and validation curves."),
+        markdown("## Numerical and hardware limits\nMixed precision can accelerate eligible operations and reduce activation storage, but standard AMP commonly retains FP32 parameters and optimizer state. Measure examples per second and validation quality rather than assuming a speedup."),
+        code("shape = (64, 128, 768)\nelements = torch.tensor(shape).prod().item()\nprint('one FP32 tensor (MB):', elements * 4 / 1e6)\nprint('one 16-bit tensor (MB):', elements * 2 / 1e6)\nbatch, step_ms = 64, 80\nprint('throughput:', batch / (step_ms / 1000), 'examples/s')"),
+        markdown("## Quantization belongs in the right phase\nPost-training quantization changes the exported inference model. Quantization-aware training simulates rounding during forward passes so parameters can adapt to the error."),
     ])
     build("m8_ship.ipynb", "M8 · Ship a model", "Save, restore, and verify a model checkpoint.", "Can another learner reproduce your evaluation from the saved artifact?", [
         code("model = torch.nn.Linear(4, 2)\nfixed_input = torch.randn(3, 4)\nexpected = model(fixed_input).detach()\ntorch.save(model.state_dict(), 'model.pt')\nrestored = torch.nn.Linear(4, 2)\nrestored.load_state_dict(torch.load('model.pt', weights_only=True))\nrestored.eval()\nactual = restored(fixed_input)\nprint('round trip matches:', torch.allclose(expected, actual))"),
+        markdown("## Resume training completely\nA resumable checkpoint also includes `optimizer.state_dict()`, epoch, configuration, and the metric used to select the best model."),
         markdown("## Capstone checklist\nTrain a small CIFAR-10 CNN, preserve the best validation checkpoint, report a confusion matrix, inspect errors, and write a miniature model card."),
     ])
 

@@ -9,8 +9,9 @@ duration: 15
 ---
 import ConvVisualizer from '../../components/widgets/ConvVisualizer.svelte';
 import Quiz from '../../components/Quiz.svelte';
+import CNNShapeLab from '../../components/widgets/CNNShapeLab.svelte';
 
-## From pixels to evidence
+## How does a classifier trade space for features?
 
 A convolutional classifier gradually trades spatial detail for richer features. Convolutions gather local evidence; activations add nonlinearity; pooling or stride reduces resolution; the final head produces one logit per class.
 
@@ -38,11 +39,15 @@ class SmallCNN(nn.Module):
 
 <ConvVisualizer client:visible />
 
+## Which numbers control the output shape?
+
+<CNNShapeLab client:visible />
+
 For `[32, 3, 32, 32]`, the first convolution produces `[32, 32, 32, 32]`; max pooling produces `[32, 32, 16, 16]`; the second convolution produces `[32, 64, 16, 16]`; adaptive average pooling produces `[32, 64, 1, 1]`; flattening produces `[32, 64]`.
 
 Adaptive pooling makes the classifier head independent of the original image size. It summarizes each learned feature map into one number.
 
-## Inspect rather than guess
+## How can you verify the shape story?
 
 ```python
 images, labels = next(iter(train_loader))

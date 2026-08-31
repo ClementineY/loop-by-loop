@@ -13,15 +13,15 @@ import Quiz from '../../components/Quiz.svelte';
 
 Train a CIFAR-10 classifier that is not merely accurate, but understandable. The notebook supplies loading and plotting code; your job is to make and defend the modeling choices.
 
-## 1. Establish the contract
+## 1. What is the data and output contract?
 
 Inspect a batch. Write the input and output shapes. Confirm class names, pixel range, and split sizes. Create a simple baseline: random guessing is 10%; a tiny linear classifier establishes whether the pipeline can learn at all.
 
-## 2. Build the smallest useful CNN
+## 2. Can the smallest useful CNN overfit one batch?
 
 Start with two convolution blocks and adaptive pooling. Count parameters. Before full training, overfit one small batch—if the network cannot drive that loss near zero, the implementation or optimization is probably wrong.
 
-## 3. Run a controlled experiment
+## 3. What single hypothesis will the experiment test?
 
 Choose one change: augmentation, weight decay, an extra convolution, or a learning-rate schedule. Write your prediction before training. Keep the seed and other settings fixed.
 
@@ -36,11 +36,11 @@ for epoch in range(config["epochs"]):
         torch.save(model.state_dict(), "best.pt")
 ```
 
-## 4. Look beyond accuracy
+## 4. Which mistakes does accuracy hide?
 
 Build a confusion matrix. Find several confident mistakes. Are particular classes confused? Is the input ambiguous, mislabeled, or outside the training distribution? Aggregate metrics locate a problem; examples explain it.
 
-## 5. Write a miniature model card
+## 5. What must another person know before using the model?
 
 Document intended use, training data, metric, known limitations, and the exact command or notebook cell that reproduces evaluation. This turns a checkpoint into a communicable artifact.
 

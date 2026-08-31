@@ -9,8 +9,13 @@ duration: 10
 ---
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
+import CheckpointLab from '../../components/widgets/CheckpointLab.svelte';
 
-## The portable unit is a state dictionary
+## Are you saving for inference or for resuming training?
+
+<CheckpointLab client:visible />
+
+## What is the portable unit?
 
 `state_dict()` maps stable parameter and buffer names to tensors. Save it rather than serializing the entire Python model object, which couples the file to code paths and implementation details.
 
@@ -26,7 +31,7 @@ restored.eval()
 
 The architecture must be constructed before loading because the state dictionary contains values, not the `forward` method.
 
-## Resume training completely
+## What extra state does training need?
 
 ```python
 torch.save({
@@ -44,7 +49,7 @@ Optimizer state matters for momentum and Adam's running statistics. Without it, 
 Load only expected formats from trusted sources. Prefer `weights_only=True` when reading PyTorch weight files and validate the model architecture and metadata separately.
 </Callout>
 
-## Verify the round trip
+## How do you prove the round trip worked?
 
 After saving and loading, run a fixed input through both models and compare outputs. This small test catches missing buffers, configuration drift, or accidentally loading the wrong checkpoint.
 

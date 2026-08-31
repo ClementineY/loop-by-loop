@@ -1,0 +1,32 @@
+---
+title: What does one neuron compute?
+module: M4 · Neural networks
+order: 6.6
+summary: Break a neuron into input votes, weights, bias, pre-activation, and output before assembling whole layers.
+colab: m4_networks.ipynb
+concepts: [neuron, weight, bias, pre-activation]
+duration: 9
+---
+import NeuronLab from '../../components/widgets/NeuronLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## How does a neuron turn several numbers into one?
+
+Each weight says how strongly one input should vote. The bias supplies evidence independent of the inputs. Add those contributions to obtain `z`, then pass `z` through an activation.
+
+<NeuronLab client:visible />
+
+## What is learned and what is supplied?
+
+The input values come from data or the previous layer. Training changes weights and biases. The activation function is chosen by the model designer and usually has no trainable values.
+
+```python
+neuron = nn.Sequential(
+    nn.Linear(2, 1),  # two weights and one bias
+    nn.ReLU(),        # no trainable parameters
+)
+```
+
+A layer is many neurons evaluated together. Its weight matrix stores one row of input weights per output neuron.
+
+<Quiz client:visible question="A Linear(3, 4) layer contains how many weights and biases?" answer="Twelve weights—three for each of four neurons—and four biases, for sixteen trainable values total." />

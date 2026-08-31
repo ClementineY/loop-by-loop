@@ -8,10 +8,11 @@ concepts: [training loop, optimizer, zero_grad, epoch]
 duration: 13
 ---
 import TrainingLoop from '../../components/widgets/TrainingLoop.svelte';
+import TrainingRhythmLab from '../../components/widgets/TrainingRhythmLab.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
-## One batch at a time
+## What exactly happens in one optimizer step?
 
 Every ordinary supervised training loop follows the same rhythm:
 
@@ -25,11 +26,32 @@ for features, targets in train_loader:
     optimizer.step()            # 5. update parameters
 ```
 
+<TrainingRhythmLab client:visible />
+
+The rhythm is not specific to classification. Regression, classification, language modeling, and reconstruction all reuse the same parameter lifecycle. What changes is the model output, the meaning of the target, the loss function, and the metric used to judge success.
+
+## Why must gradients be cleared?
+
+PyTorch adds each new gradient contribution to `.grad`. That is useful when intentionally accumulating several mini-batches, but an ordinary loop clears the previous batch first so the next update answers a clean question: “what did this batch say?”
+
+## Which parts change when the learning problem changes?
+
+| Problem | Model output | Common loss | Useful metric |
+| --- | --- | --- | --- |
+| Regression | continuous values | `MSELoss` or `L1Loss` | MAE / RMSE |
+| Binary classification | one logit | `BCEWithLogitsLoss` | precision / recall / AUROC |
+| Multiclass classification | one logit per class | `CrossEntropyLoss` | accuracy / per-class recall |
+| Reconstruction | tensor shaped like the target | MSE, L1, or task-specific loss | reconstruction error |
+
+The loss must still reduce the comparison to one scalar before `backward()` can begin.
+
+## What does repeated training look like in one classification case?
+
 <TrainingLoop client:visible />
 
-The lab trains a real two-layer network implemented by the site's tiny automatic-differentiation engine. The shaded background is its current decision boundary. Early on it is almost arbitrary. Each epoch nudges it toward a curve that separates the two moons.
+This case study trains a real two-layer network implemented by the site's tiny automatic-differentiation engine. The colored dots are labeled examples. The smooth blue-to-red field is the model’s prediction at every location; the pale contour is where it is equally unsure between the two classes. Early on the field is almost arbitrary. Repeated optimizer steps reshape it around the two moons.
 
-## Batch, step, epoch
+## How are a batch, step, and epoch related?
 
 - A **batch** is the subset used for one gradient estimate.
 - A **step** is one optimizer update.
@@ -37,7 +59,7 @@ The lab trains a real two-layer network implemented by the site's tiny automatic
 
 With 1,000 examples and batches of 100, one epoch contains ten steps. Reporting these terms precisely makes experiments comparable.
 
-## Validation is a different phase
+## Why is validation a different phase?
 
 ```python
 model.eval()
@@ -53,5 +75,13 @@ with torch.no_grad():
 <Callout type="tip" title="Log enough to debug">
 Track training loss, validation loss, the learning rate, and at least one task metric. A single final accuracy hides whether learning was stable or accidental.
 </Callout>
+
+## Where do real-world additions fit?
+
+Learning-rate schedulers normally advance after an optimizer step or epoch. Gradient clipping belongs after `backward()` and before `step()`. Mixed precision wraps the forward and loss calculation, then scales backward and the update. Gradient accumulation repeats forward/backward for several mini-batches before stepping. These tools modify the rhythm; they do not erase it.
+
+## What evidence should a training loop record?
+
+Record enough to distinguish three failures: the model cannot fit the training data, the fit does not transfer to validation data, or optimization is unstable. At minimum, keep training and validation loss, a task-relevant metric, learning rate, epoch, and the exact configuration or checkpoint that produced them.
 
 <Quiz client:visible question="Why clear gradients before backward rather than after optimizer.step()?" answer="Either placement can work if it happens exactly once per step, but clearing immediately before the forward/backward pair makes the lifecycle explicit and avoids accidentally accumulating gradients across batches." />

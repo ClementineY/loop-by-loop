@@ -1,0 +1,31 @@
+---
+title: What does each tensor axis mean?
+module: M1 · Tensors
+order: 1.5
+summary: Name dimensions before reducing, squeezing, or permuting them so shape changes remain explainable.
+colab: m1_tensors.ipynb
+concepts: [axis, dimension, reduction, keepdim]
+duration: 8
+---
+import AxisLab from '../../components/widgets/AxisLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+
+## Why should dimensions have names in your head?
+
+PyTorch stores only sizes, not meanings. In `[batch, channels, height, width]`, dimension 1 means channels because the surrounding model agrees—not because the tensor knows.
+
+<AxisLab client:visible />
+
+## What does a reduction remove?
+
+`mean`, `sum`, `max`, and similar operations combine values along one axis. Without `keepdim=True`, that axis disappears. Predict the output shape before running:
+
+```python
+images = torch.randn(8, 3, 32, 32)
+channel_means = images.mean(dim=(0, 2, 3))
+print(channel_means.shape)  # [3]
+```
+
+The batch, height, and width axes were reduced; one mean remains per channel.
+
+<Quiz client:visible question="A tensor has shape [16, 10]. What is the shape after x.argmax(dim=1)?" answer="[16]. Dimension 1—the ten class scores—is reduced to one winning index for each of the sixteen examples." />

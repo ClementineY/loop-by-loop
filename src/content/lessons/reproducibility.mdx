@@ -9,7 +9,7 @@ duration: 10
 ---
 import Quiz from '../../components/Quiz.svelte';
 
-## Reproducible does not mean identical everywhere
+## Which sources of randomness did you control?
 
 Random initialization, data shuffling, augmentation, and parallel kernels can all change results. Seeds control random streams, but hardware and library implementations may still differ.
 
@@ -33,7 +33,7 @@ For strict debugging, PyTorch can request deterministic algorithms, sometimes at
 torch.use_deterministic_algorithms(True)
 ```
 
-## Record the experiment, not only the score
+## Could another person reconstruct the run?
 
 At minimum, preserve:
 
@@ -46,7 +46,7 @@ At minimum, preserve:
 
 A result without its conditions is an anecdote.
 
-## Change one hypothesis at a time
+## Is the improvement larger than run-to-run variation?
 
 Large sweeps are useful later. Early in a project, controlled comparisons teach more. State the hypothesis—“weight decay will reduce the validation gap”—then change only that factor and compare multiple seeds when the conclusion matters.
 

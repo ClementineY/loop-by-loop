@@ -11,7 +11,7 @@ import ConvVisualizer from '../../components/widgets/ConvVisualizer.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
-## Reuse a local detector
+## Why reuse the same detector everywhere?
 
 A dense layer treats every pixel position as unrelated. A convolution assumes local patterns matter and can appear anywhere. It slides a small grid of weights—the kernel—over the input and produces one output value at each position.
 
@@ -19,7 +19,7 @@ A dense layer treats every pixel position as unrelated. A convolution assumes lo
 
 At each position, multiply overlapping input and kernel values, then sum. PyTorch's `Conv2d` technically computes cross-correlation because it does not flip the kernel, but deep-learning practice still calls the operation convolution.
 
-## Channels in and features out
+## How do channels and spatial size change?
 
 ```python
 import torch.nn as nn

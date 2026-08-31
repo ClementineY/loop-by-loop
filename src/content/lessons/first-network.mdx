@@ -7,11 +7,11 @@ colab: m4_networks.ipynb
 concepts: [nn.Module, Linear, forward, parameters]
 duration: 14
 ---
-import TrainingLoop from '../../components/widgets/TrainingLoop.svelte';
+import LayerFlowLab from '../../components/widgets/LayerFlowLab.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
-## A model is a parameterized function
+## How does PyTorch know which values belong to a model?
 
 Subclassing `nn.Module` gives PyTorch a standard way to find parameters, move them between devices, switch training modes, and save state.
 
@@ -37,11 +37,11 @@ print(sum(p.numel() for p in model.parameters()))
 
 `__init__` creates stateful building blocks. `forward` describes how data flows through them. Call `model(x)`, not `model.forward(x)`: the module call wraps hooks and framework behavior around `forward`.
 
-<TrainingLoop client:visible />
+<LayerFlowLab client:visible />
 
 The first layer maps each two-dimensional point to `hidden` learned features. Tanh bends those features. The last layer recombines them into one score. Hidden width changes capacity: too few units may underfit, while more units add flexibility and computation.
 
-## Know your shapes
+## Which dimensions change, and which stay fixed?
 
 For a batch of 32 points:
 

@@ -10,7 +10,7 @@ duration: 10
 import Quiz from '../../components/Quiz.svelte';
 import BatchGradientLab from '../../components/widgets/BatchGradientLab.svelte';
 
-## Why batches exist
+## Why not train on one example—or the whole dataset?
 
 One example produces a noisy gradient and underuses vector hardware. The entire dataset produces a stable gradient but may not fit in memory and updates only once per epoch. A mini-batch balances both.
 
@@ -32,13 +32,13 @@ train_loader = DataLoader(
 
 `DataLoader` requests examples from the dataset, combines them along a new leading batch dimension, and optionally uses worker processes to prepare future batches.
 
-## Shuffle breaks accidental structure
+## Why does shuffle change learning but not the dataset?
 
 Datasets are often ordered by label, time, or source. Without shuffling, several consecutive optimizer steps may see only one class. That biases each gradient toward the local ordering rather than the full training distribution.
 
 Do not shuffle validation data unless a downstream consumer requires it. Order does not change aggregate metrics, and stable order makes debugging examples easier.
 
-## The final smaller batch
+## What happens to the final smaller batch?
 
 If dataset size is not divisible by batch size, the final batch is smaller. Most models handle this naturally. Set `drop_last=True` only when fixed batch size is genuinely required, such as some contrastive objectives or distributed synchronization patterns.
 

@@ -1,0 +1,61 @@
+---
+title: Train within numerical and hardware limits
+module: M7 · Training well
+order: 14.5
+summary: Diagnose unstable arithmetic, measure throughput, account for training memory, and decide when reduced precision or quantization belongs in the workflow.
+colab: m7_training_well.ipynb
+concepts: [stability, mixed precision, throughput, memory, quantization]
+duration: 16
+---
+import TrainingConstraintsLab from '../../components/widgets/TrainingConstraintsLab.svelte';
+import Callout from '../../components/Callout.astro';
+import Quiz from '../../components/Quiz.svelte';
+
+## What does stable training look like?
+
+Stable does not mean perfectly smooth. Mini-batches make loss noisy. A healthy run keeps values finite, gradients informative, and the overall training trend compatible with the validation trend. Watch the loss, gradient norm, update size, and the fraction of skipped or non-finite steps—not loss alone.
+
+<TrainingConstraintsLab client:visible />
+
+## Why can mixed precision help?
+
+Modern accelerators can execute many FP16 or BF16 operations faster and store eligible activations in fewer bytes. Automatic mixed precision chooses lower precision for suitable operations and retains higher precision where range or accuracy is important.
+
+```python
+scaler = torch.amp.GradScaler("cuda")
+for x, y in loader:
+    optimizer.zero_grad()
+    with torch.autocast(device_type="cuda", dtype=torch.float16):
+        loss = loss_fn(model(x), y)
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+```
+
+FP16 has limited numerical range, so gradient scaling makes tiny gradients less likely to underflow before the update. BF16 has fewer fraction bits but the same exponent width as FP32, so it often needs less range management on supported hardware. Speedup is hardware- and workload-dependent; measure it.
+
+## What actually consumes training memory?
+
+Training memory is a sum: parameters, gradients, optimizer state, saved activations, temporary workspaces, allocator fragmentation, and the current batch. For FP32 Adam, parameters, gradients, and two optimizer moments alone are commonly about 16 bytes per parameter. Standard automatic mixed precision often reduces selected activation storage and compute cost while keeping FP32 parameters and optimizer state.
+
+Gradient checkpointing saves fewer activations but recomputes part of the forward pass during backward; it exchanges time for memory.
+
+## Is higher throughput the same as better training?
+
+No. Throughput measures examples or tokens processed per second. Time-to-quality asks how long it takes to reach a useful validation result. A larger batch may raise hardware utilization while needing learning-rate changes or more processed examples. Record step time, data-loading time, device utilization, and validation quality per unit of wall-clock time.
+
+## When does quantization error matter for training?
+
+Post-training quantization is mainly an M8 deployment choice: train normally, then compress the inference representation. Quantization-aware training belongs here in M7 because simulated rounding is inserted during forward passes so weights can adapt to it. Since `round` has an unhelpful derivative almost everywhere, QAT commonly uses a straight-through gradient approximation during backward.
+
+The question is not “is INT8 accurate?” in the abstract. Ask whether the rounding scale preserves values that matter for this model, layer, and data distribution. Inspect per-layer error and the final task metric.
+
+## What should happen after a non-finite loss?
+
+Stop treating the run as trustworthy. Preserve the failing batch and configuration, then inspect inputs and targets, the last finite loss, gradient norms, learning rate, normalization, and the first operation producing `NaN` or infinity. Silently continuing can turn one diagnosable step into a corrupted checkpoint.
+
+<Callout type="tip" title="Measure before changing precision">
+Capture a full-precision baseline for correctness, memory, throughput, and validation quality. Reduced precision is an optimization against that baseline, not a substitute for one.
+</Callout>
+
+<Quiz client:visible question="Why might mixed precision use much less activation memory without halving total training memory?" answer="Because standard automatic mixed precision can store eligible activations in 16-bit formats while parameters, gradients, optimizer moments, and some operations remain in FP32. Total memory depends on the full breakdown." />

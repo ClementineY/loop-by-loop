@@ -1,76 +1,67 @@
 <script lang="ts">
-  type Task = 'regression' | 'binary' | 'multiclass' | 'reconstruction';
-  const tasks: {id:Task; label:string; output:string; loss:string; question:string}[] = [
-    {id:'regression',label:'Regression',output:'one number',loss:'MSELoss',question:'How far is the predicted value from the target?'},
-    {id:'binary',label:'Binary class',output:'one logit',loss:'BCEWithLogitsLoss',question:'How much evidence supports class 1?'},
-    {id:'multiclass',label:'3 classes',output:'three logits',loss:'CrossEntropyLoss',question:'Does the target class have the strongest logit?'},
-    {id:'reconstruction',label:'Reconstruct',output:'an image-shaped tensor',loss:'MSELoss',question:'How closely does the output reproduce every input value?'}
+  import {binaryTrainingStep,multiclassTrainingStep,parseTuneValues,reconstructionTrainingStep,regressionTrainingStep} from '../../lib/curriculum';
+  type Task='regression'|'binary'|'multiclass'|'reconstruction';
+  const tasks:{id:Task;label:string;output:string;loss:string;setup:string;loop:string[]}[]=[
+    {id:'regression',label:'Predict a number',output:'prediction',loss:'MSELoss',setup:`x = torch.tensor([[2.0]])          # tune:x\ntarget = torch.tensor([[5.0]])     # tune:target\nstart_weight = 1.0                  # tune:weight\nstart_bias = 0.5                    # tune:bias\nlr = 0.05                           # tune:lr\nmodel = nn.Linear(1, 1)\nmodel.weight.data.fill_(start_weight)\nmodel.bias.data.fill_(start_bias)\noptimizer = torch.optim.SGD(model.parameters(), lr=lr)`,loop:['optimizer.zero_grad()','prediction = model(x)','loss = F.mse_loss(prediction, target)','loss.backward()','optimizer.step()']},
+    {id:'binary',label:'Choose yes / no',output:'logit',loss:'BCEWithLogitsLoss',setup:`x = torch.tensor([[1.0]])          # tune:x\ntarget = torch.tensor([[1.0]])     # tune:target\nstart_weight = -0.4                 # tune:weight\nstart_bias = 0.0                    # tune:bias\nlr = 0.50                           # tune:lr\nmodel = nn.Linear(1, 1)\nmodel.weight.data.fill_(start_weight)\nmodel.bias.data.fill_(start_bias)\noptimizer = torch.optim.SGD(model.parameters(), lr=lr)`,loop:['optimizer.zero_grad()','logit = model(x)','loss = F.binary_cross_entropy_with_logits(logit, target)','loss.backward()','optimizer.step()']},
+    {id:'multiclass',label:'Choose 1 of 3',output:'logits',loss:'CrossEntropyLoss',setup:`start_logits = torch.tensor([1.1, 0.4, -0.2]) # tune:logits\ntarget = torch.tensor([1])                       # tune:target\nlr = 0.40                                        # tune:lr\nlogits = nn.Parameter(start_logits.clone())\noptimizer = torch.optim.SGD([logits], lr=lr)`,loop:['optimizer.zero_grad()','prediction = logits.unsqueeze(0)','loss = F.cross_entropy(prediction, target)','loss.backward()','optimizer.step()']},
+    {id:'reconstruction',label:'Rebuild values',output:'tensor',loss:'MSELoss',setup:`prediction = torch.tensor([0.2, 0.8, 0.3, 0.7], requires_grad=True) # tune:prediction\ntarget = torch.tensor([0.0, 1.0, 1.0, 0.0])                   # tune:target\nlr = 0.50                                                      # tune:lr\noptimizer = torch.optim.SGD([prediction], lr=lr)`,loop:['optimizer.zero_grad()','output = prediction','loss = F.mse_loss(output, target)','loss.backward()','optimizer.step()']}
   ];
-  const stages = [
-    ['zero_grad()', 'clear gradients left by the previous batch'],
-    ['model(x)', 'produce an output with the current parameters'],
-    ['loss_fn(output, y)', 'turn task-specific error into one scalar'],
-    ['loss.backward()', 'measure every parameter’s responsibility'],
-    ['optimizer.step()', 'use those gradients to update parameters']
-  ];
-  let task:Task='regression',stage=1;
+  const vocabulary=[['gradient buffer','where `.grad` values wait'],['forward pass','code that creates the output'],['scalar loss','one number measuring error'],['backward pass','fills parameter gradients'],['optimizer step','changes parameter values']];
+  let task:Task='regression',stage=0,code=tasks[0].setup,error='';
   $: selected=tasks.find(item=>item.id===task)!;
-  $: updated=stage===4;
-  const before=[.05,.72,.18,.9,.34,.8,.12,.65,.14,.84,.28,.75,.08,.6,.2,.88];
-  const target=[0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0];
-  $: pixels=before.map((value,index)=>updated ? value+.62*(target[index]-value) : value);
+  const markerNumbers=parseTuneValues;
+  function scalar(key:string,fallback:number){const values=markerNumbers(code,key,[fallback]);return values[values.length-1]}
+  function changeTask(next:Task){task=next;const item=tasks.find(entry=>entry.id===next)!;code=item.setup;stage=0;error=''}
+  function reset(){code=selected.setup;stage=0;error=''}
+  $: values=(()=>{try{error='';
+    if(task==='regression')return {kind:task,data:regressionTrainingStep(scalar('x',2),scalar('target',5),scalar('weight',1),scalar('bias',.5),scalar('lr',.05))};
+    if(task==='binary')return {kind:task,data:binaryTrainingStep(scalar('x',1),scalar('target',1),scalar('weight',-.4),scalar('bias',0),scalar('lr',.5))};
+    if(task==='multiclass'){const logits=markerNumbers(code,'logits',[1.1,.4,-.2]);const target=Math.max(0,Math.min(logits.length-1,Math.round(scalar('target',1))));return {kind:task,data:multiclassTrainingStep(logits,target,scalar('lr',.4))}}
+    const prediction=markerNumbers(code,'prediction',[.2,.8,.3,.7]),target=markerNumbers(code,'target',[0,1,1,0]);return {kind:task,data:reconstructionTrainingStep(prediction,target,scalar('lr',.5))};
+  }catch(caught){error=caught instanceof Error?caught.message:'Check the editable values';return null}})();
+  $: activeWord=vocabulary[stage];
 </script>
 
 <section class="lab" aria-labelledby="rhythm-title">
-  <header>
-    <div><span>Interactive comparison</span><h3 id="rhythm-title">One rhythm, four learning problems</h3></div>
-    <p><b>{selected.output}</b><small>{selected.loss}</small></p>
-  </header>
-  <nav aria-label="Choose a learning problem">
-    {#each tasks as item}<button class:active={task===item.id} onclick={()=>{task=item.id;stage=1}}>{item.label}</button>{/each}
-  </nav>
-  <div class="body">
-    <ol aria-label="Training step">
-      {#each stages as item,index}
-        <li class:active={stage===index} class:done={stage>index}>
-          <button onclick={()=>stage=index}><i>{index+1}</i><code>{item[0]}</code><small>{item[1]}</small></button>
-        </li>
-      {/each}
-    </ol>
-    <div class="stage">
-      <div class="prompt"><small>The task-specific question</small><strong>{selected.question}</strong></div>
-      {#if task==='regression'}
-        <svg viewBox="0 0 420 220" role="img" aria-label="Regression line moving closer to a target point after an optimizer step">
-          <line class="axis" x1="40" y1="185" x2="390" y2="185"/><line class="axis" x1="40" y1="25" x2="40" y2="185"/>
-          <path class="fit" d={updated?'M 40 176 L 390 38':'M 40 168 L 390 100'}/>
-          <circle class="target" cx="300" cy="55" r="7"/><circle class="prediction" cx="300" cy={updated?73:116} r="7"/>
-          <line class="error" x1="300" y1="55" x2="300" y2={updated?73:116}/><text x="310" y="52">target = 5</text><text x="310" y={updated?82:125}>prediction = {updated?'3.75':'2.50'}</text>
-        </svg>
-      {:else if task==='binary'}
-        <svg viewBox="0 0 420 220" role="img" aria-label="Binary classification score moving toward the positive target">
-          <line class="scale" x1="55" y1="120" x2="365" y2="120"/><text x="48" y="150">class 0</text><text x="330" y="150">class 1</text>
-          <circle class="target" cx="365" cy="120" r="8"/><circle class="prediction" cx={updated?226:179} cy="120" r="9"/>
-          <path class="arrow" d={updated?'M 179 91 L 218 91':'M 179 91 L 179 91'}/><text x="145" y="62">p(class 1) = {updated?'0.55':'0.40'}</text>
-        </svg>
-      {:else if task==='multiclass'}
-        <div class="bars" role="img" aria-label="Three class probabilities with class one as the target">
-          {#each (updated?[.44,.40,.16]:[.56,.28,.16]) as probability,index}
-            <div class:target-bar={index===1}><span style={`height:${probability*180}px`}></span><b>{Math.round(probability*100)}%</b><small>class {index}{index===1?' · target':''}</small></div>
-          {/each}
+  <header><div><span>Code ↔ visual workbench</span><h3 id="rhythm-title">Tune one training step</h3></div><div class="shape"><b>{selected.output}</b><small>{selected.loss}</small></div></header>
+  <nav aria-label="Choose a learning problem">{#each tasks as item}<button class:active={task===item.id} onclick={()=>changeTask(item.id)}>{item.label}</button>{/each}</nav>
+  <div class="workspace">
+    <div class="code-panel">
+      <div class="filebar"><span>train.py</span><button onclick={reset}>Reset values</button></div>
+      <label for="setup-code">Edit the numbers marked <code># tune:</code></label>
+      <textarea id="setup-code" bind:value={code} spellcheck="false" aria-describedby="code-help"></textarea>
+      <small id="code-help">The visual recalculates from this PyTorch setup.</small>
+      <div class="loop" aria-label="Five-line training loop">
+        {#each selected.loop as line,index}<button class:active={stage===index} onclick={()=>stage=index}><i>{index+1}</i><code>{line}</code></button>{/each}
+      </div>
+      <div class="stepper"><button onclick={()=>stage=Math.max(0,stage-1)} disabled={stage===0}>← Back</button><span>line {stage+1} of 5</span><button onclick={()=>stage=Math.min(4,stage+1)} disabled={stage===4}>Next line →</button></div>
+    </div>
+    <div class="visual-panel">
+      <div class="word"><small>PyTorch vocabulary</small><strong>{activeWord[0]}</strong><span>{activeWord[1]}</span></div>
+      {#if error||!values}<p class="error">{error||'Check the editable values.'}</p>
+      {:else if values.kind==='regression'}
+        {@const d=values.data}
+        <div class="regression visual" class:updated={stage===4}>
+          <div class="plot" style={`--angle:${-Math.atan(stage===4?d.nextWeight:d.weight)*180/Math.PI}deg;--intercept:${Math.max(4,Math.min(40,8+(stage===4?d.nextBias:d.bias)*8))}%`}><i class="target-dot" style={`--y:${Math.max(8,Math.min(90,100-d.target*12))}%`}></i><i class="prediction-dot" style={`--y:${Math.max(8,Math.min(90,100-(stage===4?d.nextPrediction:d.prediction)*12))}%`}></i><span class="gap"></span></div>
+          <div class="readout"><span>target <b>{d.target.toFixed(2)}</b></span><span>prediction <b>{(stage===4?d.nextPrediction:d.prediction).toFixed(2)}</b></span><span>loss <b>{stage>=2?d.loss.toFixed(3):'—'}</b></span><span>weight.grad <b>{stage>=3?d.gradientWeight.toFixed(2):stage===0?'0.00':'—'}</b></span></div>
         </div>
+      {:else if values.kind==='binary'}
+        {@const d=values.data}
+        <div class="binary visual"><div class="probability"><span>class 0</span><i style={`--p:${(stage===4?d.nextProbability:d.probability)*100}%`}></i><span>class 1</span></div><strong>{((stage===4?d.nextProbability:d.probability)*100).toFixed(1)}% class 1</strong><div class="readout"><span>target <b>{d.target}</b></span><span>logit <b>{(stage===4?d.nextLogit:d.logit).toFixed(3)}</b></span><span>loss <b>{stage>=2?d.loss.toFixed(3):'—'}</b></span><span>logit gradient <b>{stage>=3?d.gradientLogit.toFixed(3):stage===0?'0.000':'—'}</b></span></div></div>
+      {:else if values.kind==='multiclass'}
+        {@const d=values.data}
+        <div class="multiclass visual"><div class="bars">{#each (stage===4?d.nextProbabilities:d.probabilities) as probability,index}<div class:target={index===d.target}><b>{(probability*100).toFixed(1)}%</b><i style={`--h:${probability*100}%`}></i><span>class {index}</span></div>{/each}</div><div class="readout"><span>target class <b>{d.target}</b></span><span>loss <b>{stage>=2?d.loss.toFixed(3):'—'}</b></span><span>target gradient <b>{stage>=3?d.gradients[d.target].toFixed(3):stage===0?'0.000':'—'}</b></span></div></div>
       {:else}
-        <div class="reconstruction" role="img" aria-label="Input pixels and reconstructed pixels becoming more similar">
-          <div><small>input</small><div class="pixel-grid">{#each target as value}<i style={`opacity:${.12+.88*value}`}></i>{/each}</div></div>
-          <b>→</b>
-          <div><small>model output</small><div class="pixel-grid">{#each pixels as value}<i style={`opacity:${.12+.88*value}`}></i>{/each}</div></div>
-        </div>
+        {@const d=values.data}
+        <div class="reconstruction visual"><div class="grids"><div><small>target</small><div>{#each d.target as value}<i style={`--value:${Math.max(0,Math.min(1,value))}`}></i>{/each}</div></div><b>↔</b><div><small>output</small><div>{#each (stage===4?d.nextPrediction:d.prediction) as value}<i style={`--value:${Math.max(0,Math.min(1,value))}`}></i>{/each}</div></div></div><div class="readout"><span>shape <b>[{d.target.length}]</b></span><span>loss <b>{stage>=2?d.loss.toFixed(3):'—'}</b></span><span>gradients <b>{stage>=3?'ready':stage===0?'zero':'—'}</b></span></div></div>
       {/if}
-      <footer><code>{selected.loss}</code><b>{stage<2?'not computed yet':updated?'smaller after update':'one scalar error'}</b></footer>
+      <div class="state"><i class:filled={stage>=1}></i><span>output</span><i class:filled={stage>=2}></i><span>loss</span><i class:filled={stage>=3}></i><span>gradients</span><i class:filled={stage>=4}></i><span>new parameters</span></div>
     </div>
   </div>
-  <aside><b>Changes with the task:</b> output shape, target meaning, loss, and metric. <b>Stays the same:</b> the five-step parameter lifecycle.</aside>
+  <footer><div><b>batch</b><span>examples used now</span></div><i>→</i><div><b>step</b><span>one parameter update</span></div><i>→ repeat all batches →</i><div><b>epoch</b><span>one pass through data</span></div></footer>
 </section>
 
 <style>
-  .lab{margin:2rem 0;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;box-shadow:0 16px 45px var(--shadow)}header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.1rem}header span,.prompt small{font:800 .59rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}header h3{margin:.2rem 0}header p{margin:0;text-align:right}header p b,header p small{display:block;font:.68rem var(--font-mono)}header p small{margin-top:.2rem;color:var(--text-muted)}nav{display:grid;grid-template-columns:repeat(4,1fr);border-block:1px solid var(--border)}nav button{border:0;border-right:1px solid var(--border);padding:.65rem;background:var(--bg);color:var(--text-muted);font-weight:720}nav button:last-child{border:0}nav button.active{background:var(--accent);color:white}.body{display:grid;grid-template-columns:minmax(210px,.8fr) 1.4fr}.body ol{list-style:none;margin:0;padding:.7rem;border-right:1px solid var(--border)}li button{display:grid;grid-template-columns:24px 1fr;gap:.05rem .55rem;width:100%;padding:.56rem;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left}li button:hover,li.active button{background:var(--accent-soft)}li i{grid-row:1/3;display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--border);border-radius:50%;font:normal .58rem var(--font-mono)}li.active i{background:var(--accent);border-color:var(--accent);color:white}li.done i{border-color:var(--accent);color:var(--accent)}li code{font-size:.67rem}li small{color:var(--text-subtle);font-size:.57rem;line-height:1.3}.stage{min-width:0;background:#121925;color:white}.prompt{padding:.85rem 1rem 0}.prompt small,.prompt strong{display:block}.prompt strong{margin-top:.25rem;font-size:.76rem}.stage svg{display:block;width:100%;height:220px}.axis,.scale{stroke:#566278;stroke-width:1}.fit{fill:none;stroke:#8ea6ca;stroke-width:3}.target{fill:#df5b35}.prediction{fill:#8ea6ca;stroke:white;stroke-width:2}.error{stroke:#df5b35;stroke-width:2;stroke-dasharray:5}.arrow{fill:none;stroke:#8ea6ca;stroke-width:2}.stage text{fill:#aab4c3;font:11px var(--font-mono)}.bars{height:220px;display:flex;justify-content:center;align-items:flex-end;gap:2rem;padding:20px}.bars div{height:190px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:.3rem}.bars span{display:block;width:54px;background:#71819a;border-radius:5px 5px 0 0;transition:height .25s}.bars .target-bar span{background:#df5b35}.bars b{font:.68rem var(--font-mono)}.bars small{color:#99a5b6;font-size:.57rem}.reconstruction{height:220px;display:flex;align-items:center;justify-content:center;gap:1.5rem}.reconstruction>div>small{display:block;margin-bottom:.4rem;color:#99a5b6;font:.6rem var(--font-mono)}.pixel-grid{display:grid;grid-template-columns:repeat(4,30px);gap:4px}.pixel-grid i{display:block;width:30px;height:30px;background:#f2f4f7;border-radius:3px;transition:opacity .25s}.stage footer{display:flex;justify-content:space-between;padding:.65rem 1rem;border-top:1px solid #303949;color:#aab4c3}.stage footer b{font-size:.65rem}.stage footer code{font-size:.62rem}aside{padding:.75rem 1rem;background:var(--accent-soft);color:var(--text-muted);font-size:.67rem}aside b{color:var(--text)}@media(max-width:720px){nav{grid-template-columns:1fr 1fr}.body{grid-template-columns:1fr}.body ol{border:0;border-bottom:1px solid var(--border)}header{align-items:flex-start}.bars{gap:.8rem}.pixel-grid{grid-template-columns:repeat(4,24px)}.pixel-grid i{width:24px;height:24px}}
+  .lab{margin:1.5rem 0;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;box-shadow:0 16px 45px var(--shadow)}header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.1rem}header span,.word small{font:800 .58rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}header h3{margin:.2rem 0}.shape{text-align:right}.shape b,.shape small{display:block;font:.64rem var(--font-mono)}.shape small{margin-top:.2rem;color:var(--text-muted)}nav{display:grid;grid-template-columns:repeat(4,1fr);border-block:1px solid var(--border)}nav button{border:0;border-right:1px solid var(--border);padding:.65rem .35rem;background:var(--bg);color:var(--text-muted);font-size:.64rem;font-weight:750}nav button:last-child{border:0}nav button.active{background:var(--accent);color:white}.workspace{display:grid;grid-template-columns:1.08fr .92fr;min-height:610px}.code-panel{padding:.8rem;background:#101722;color:#e7ecf3;border-right:1px solid #303949}.filebar{display:flex;justify-content:space-between;align-items:center;margin:-.8rem -.8rem .7rem;padding:.55rem .75rem;background:#1a2330;color:#9eabba;font:.59rem var(--font-mono)}.filebar button{border:1px solid #3c4859;background:#151e2a;color:#bdc7d4;padding:.3rem .45rem;border-radius:5px;font-size:.57rem}.code-panel>label{display:block;margin:.4rem 0;color:#9da9b8;font-size:.58rem}.code-panel textarea{box-sizing:border-box;width:100%;height:238px;resize:vertical;border:1px solid #344053;border-radius:7px;background:#0b111a;color:#dce4ee;padding:.7rem;font:500 .61rem/1.55 var(--font-mono);tab-size:2}.code-panel>small{display:block;margin:.35rem 0 .7rem;color:#78869a;font-size:.54rem}.loop{display:grid;gap:3px}.loop button{display:grid;grid-template-columns:22px 1fr;align-items:center;gap:.45rem;width:100%;padding:.43rem .5rem;border:1px solid transparent;border-radius:6px;background:transparent;color:#cbd5e1;text-align:left}.loop button:hover,.loop button.active{border-color:#4d5c70;background:#202b3a}.loop button.active code{color:#ff9a79}.loop i{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:#263243;color:#8695a8;font:normal .53rem var(--font-mono)}.loop button.active i{background:var(--accent);color:white}.loop code{overflow:hidden;text-overflow:ellipsis;font-size:.58rem;white-space:nowrap}.stepper{display:flex;justify-content:space-between;align-items:center;margin-top:.65rem}.stepper button{border:1px solid #3b485a;border-radius:5px;background:#1c2634;color:#d4dce6;padding:.36rem .5rem;font-size:.57rem}.stepper button:disabled{opacity:.35}.stepper span{color:#77869a;font:.54rem var(--font-mono)}.visual-panel{display:flex;flex-direction:column;min-width:0;background:#f6f2ea}.word{padding:1rem;background:white;border-bottom:1px solid #ded7cb}.word small,.word strong,.word span{display:block}.word strong{margin:.2rem 0;font-size:1.05rem}.word span{color:#6e7279;font-size:.62rem}.visual{display:flex;flex:1;flex-direction:column;justify-content:center;padding:1rem}.plot{position:relative;height:260px;border-left:1px solid #89909a;border-bottom:1px solid #89909a;background:linear-gradient(#e0d9cd 1px,transparent 1px),linear-gradient(90deg,#e0d9cd 1px,transparent 1px);background-size:25% 25%}.plot:after{content:'model prediction';position:absolute;left:8%;bottom:var(--intercept);width:90%;height:3px;background:#7586a3;transform:rotate(var(--angle));transform-origin:left}.plot i{position:absolute;left:72%;top:var(--y);width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);z-index:2}.target-dot{background:#df5b35;box-shadow:0 0 0 4px #fff}.prediction-dot{background:#506789;border:2px solid white}.readout{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:1rem;background:#d8d0c4}.readout span{padding:.55rem;background:#f6f2ea;color:#6d7279;font-size:.55rem}.readout b{display:block;margin-top:.15rem;color:#20242a;font:.7rem var(--font-mono)}.probability{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.6rem}.probability span{font-size:.57rem}.probability i{position:relative;height:12px;border-radius:6px;background:linear-gradient(90deg,#607899 0 50%,#df7656 50%)}.probability i:after{content:'';position:absolute;left:var(--p);top:50%;width:18px;height:18px;border:3px solid white;border-radius:50%;background:#1e2836;transform:translate(-50%,-50%);box-shadow:0 1px 4px #0004}.binary>strong{margin:1.2rem auto;font:800 1.2rem var(--font-mono)}.bars{display:flex;align-items:flex-end;justify-content:center;gap:1.2rem;height:260px}.bars div{display:grid;grid-template-rows:auto 1fr auto;align-items:end;justify-items:center;width:68px;height:220px}.bars i{display:block;width:52px;height:var(--h);min-height:3px;background:#71819a;border-radius:5px 5px 0 0;transition:height .2s}.bars .target i{background:#df7656}.bars b{font:.62rem var(--font-mono)}.bars span{margin-top:.35rem;font-size:.56rem}.grids{display:flex;align-items:center;justify-content:center;gap:1.2rem}.grids>div>small{display:block;margin-bottom:.35rem;color:#6f747c;font:.58rem var(--font-mono)}.grids>div>div{display:grid;grid-template-columns:repeat(2,58px);gap:5px}.grids i{display:block;width:58px;height:58px;border-radius:5px;background:rgba(39,51,68,var(--value));border:1px solid #bdb6aa}.state{display:grid;grid-template-columns:10px 1fr 10px 1fr;padding:.75rem 1rem;background:#e8e1d6;gap:.35rem .4rem;align-items:center}.state i{width:8px;height:8px;border:1px solid #99938a;border-radius:50%}.state i.filled{background:var(--accent);border-color:var(--accent)}.state span{font-size:.54rem;color:#6d716f}.error{margin:auto;padding:1rem;color:#9b3326}footer{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:.7rem;padding:.75rem 1rem;background:var(--accent-soft)}footer div{display:flex;flex-direction:column}footer b{font:.68rem var(--font-mono)}footer span,footer i{color:var(--text-muted);font:normal .55rem var(--font-mono)}@media(max-width:780px){nav{grid-template-columns:1fr 1fr}.workspace{grid-template-columns:1fr}.code-panel{border-right:0}.visual-panel{min-height:500px}footer{grid-template-columns:1fr;gap:.25rem}footer>i{transform:rotate(90deg);transform-origin:left}.shape{display:none}}
 </style>

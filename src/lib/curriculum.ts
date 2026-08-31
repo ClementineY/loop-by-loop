@@ -46,3 +46,44 @@ export function quantizeScalar(value:number,step:number) {
   const quantized=Math.round(value/step)*step;
   return {quantized,error:quantized-value};
 }
+
+export function regressionTrainingStep(x:number,target:number,weight:number,bias:number,lr:number) {
+  const prediction=weight*x+bias,error=prediction-target,loss=error**2;
+  const gradientWeight=2*error*x,gradientBias=2*error;
+  const nextWeight=weight-lr*gradientWeight,nextBias=bias-lr*gradientBias;
+  return {x,weight,bias,prediction,target,loss,gradientWeight,gradientBias,nextWeight,nextBias,nextPrediction:nextWeight*x+nextBias};
+}
+
+export function binaryTrainingStep(x:number,target:number,weight:number,bias:number,lr:number) {
+  const logit=weight*x+bias,probability=1/(1+Math.exp(-logit));
+  const loss=-(target*Math.log(probability)+(1-target)*Math.log(1-probability));
+  const gradientLogit=probability-target,gradientWeight=gradientLogit*x,gradientBias=gradientLogit;
+  const nextWeight=weight-lr*gradientWeight,nextBias=bias-lr*gradientBias;
+  const nextLogit=nextWeight*x+nextBias,nextProbability=1/(1+Math.exp(-nextLogit));
+  return {logit,probability,target,loss,gradientLogit,gradientWeight,gradientBias,nextWeight,nextBias,nextLogit,nextProbability};
+}
+
+export function multiclassTrainingStep(logits:number[],target:number,lr:number) {
+  const max=Math.max(...logits),exp=logits.map(value=>Math.exp(value-max)),sum=exp.reduce((a,b)=>a+b,0),probabilities=exp.map(value=>value/sum);
+  const loss=-Math.log(probabilities[target]);
+  const gradients=probabilities.map((value,index)=>value-(index===target?1:0));
+  const nextLogits=logits.map((value,index)=>value-lr*gradients[index]);
+  const nextMax=Math.max(...nextLogits),nextExp=nextLogits.map(value=>Math.exp(value-nextMax)),nextSum=nextExp.reduce((a,b)=>a+b,0),nextProbabilities=nextExp.map(value=>value/nextSum);
+  return {logits,target,probabilities,loss,gradients,nextLogits,nextProbabilities};
+}
+
+export function reconstructionTrainingStep(prediction:number[],target:number[],lr:number) {
+  if(prediction.length!==target.length||!prediction.length)throw new RangeError('prediction and target need matching non-empty shapes');
+  const errors=prediction.map((value,index)=>value-target[index]);
+  const loss=errors.reduce((sum,value)=>sum+value**2,0)/prediction.length;
+  const gradients=errors.map(value=>2*value/prediction.length);
+  const nextPrediction=prediction.map((value,index)=>value-lr*gradients[index]);
+  return {prediction,target,loss,gradients,nextPrediction};
+}
+
+export function parseTuneValues(source:string,key:string,fallback:number[]) {
+  const line=source.split('\n').find(item=>item.includes(`# tune:${key}`));
+  if(!line)return fallback;
+  const values=(line.split('#')[0].match(/-?\d+(?:\.\d+)?/g)||[]).map(Number);
+  return values.length?values:fallback;
+}

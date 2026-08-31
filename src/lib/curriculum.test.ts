@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {bestValidationEpoch,conv2dGeometry,examplesPerSecond,generalizationLoss,linearParameterCount,neuronForward,quantizeScalar,reduceShape,softmax2,splitCounts,tensorStorageMB} from './curriculum';
+import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,examplesPerSecond,generalizationLoss,linearParameterCount,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,softmax2,splitCounts,tensorStorageMB} from './curriculum';
 
 describe('course visual calculations',()=>{
   it('matches the default neuron arithmetic',()=>{
@@ -35,5 +35,31 @@ describe('course visual calculations',()=>{
   });
   it('shows signed scalar quantization error',()=>{
     expect(quantizeScalar(.63,.25)).toEqual({quantized:.75,error:.12});
+  });
+  it('matches one editable regression step',()=>{
+    const step=regressionTrainingStep(2,5,1,.5,.05);
+    expect(step.prediction).toBe(2.5);
+    expect(step.loss).toBe(6.25);
+    expect(step.gradientWeight).toBe(-10);
+    expect(step.nextPrediction).toBe(3.75);
+  });
+  it('moves binary probability toward a positive target',()=>{
+    const step=binaryTrainingStep(1,1,-.4,0,.5);
+    expect(step.probability).toBeCloseTo(.401312);
+    expect(step.loss).toBeCloseTo(.913015);
+    expect(step.nextProbability).toBeGreaterThan(step.probability);
+  });
+  it('raises the target probability in multiclass training',()=>{
+    const step=multiclassTrainingStep([1.1,.4,-.2],1,.4);
+    expect(step.probabilities.reduce((a,b)=>a+b,0)).toBeCloseTo(1);
+    expect(step.nextProbabilities[1]).toBeGreaterThan(step.probabilities[1]);
+  });
+  it('moves every reconstruction value toward its target',()=>{
+    const step=reconstructionTrainingStep([.2,.8,.3,.7],[0,1,1,0],.5);
+    step.nextPrediction.forEach((value,index)=>expect(Math.abs(value-step.target[index])).toBeLessThan(Math.abs(step.prediction[index]-step.target[index])));
+  });
+  it('reads editable scalar and vector values from marked PyTorch code',()=>{
+    expect(parseTuneValues('lr = 0.05 # tune:lr','lr',[1])).toEqual([.05]);
+    expect(parseTuneValues('x = torch.tensor([0.2, 0.8, -0.3]) # tune:x','x',[])).toEqual([.2,.8,-.3]);
   });
 });

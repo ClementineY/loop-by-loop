@@ -10,78 +10,17 @@ duration: 13
 import TrainingLoop from '../../components/widgets/TrainingLoop.svelte';
 import TrainingRhythmLab from '../../components/widgets/TrainingRhythmLab.svelte';
 import Quiz from '../../components/Quiz.svelte';
-import Callout from '../../components/Callout.astro';
 
-## What exactly happens in one optimizer step?
+## Read the code by watching state change
 
-Every ordinary supervised training loop follows the same rhythm:
-
-```python
-model.train()
-for features, targets in train_loader:
-    optimizer.zero_grad()       # 1. clear old gradients
-    predictions = model(features) # 2. forward
-    loss = loss_fn(predictions, targets) # 3. compare
-    loss.backward()             # 4. compute gradients
-    optimizer.step()            # 5. update parameters
-```
+Edit the marked values, then click each code line. The visual beside it shows the PyTorch state that line creates or changes.
 
 <TrainingRhythmLab client:visible />
 
-The rhythm is not specific to classification. Regression, classification, language modeling, and reconstruction all reuse the same parameter lifecycle. What changes is the model output, the meaning of the target, the loss function, and the metric used to judge success.
-
-## Why must gradients be cleared?
-
-PyTorch adds each new gradient contribution to `.grad`. That is useful when intentionally accumulating several mini-batches, but an ordinary loop clears the previous batch first so the next update answers a clean question: “what did this batch say?”
-
-## Which parts change when the learning problem changes?
-
-| Problem | Model output | Common loss | Useful metric |
-| --- | --- | --- | --- |
-| Regression | continuous values | `MSELoss` or `L1Loss` | MAE / RMSE |
-| Binary classification | one logit | `BCEWithLogitsLoss` | precision / recall / AUROC |
-| Multiclass classification | one logit per class | `CrossEntropyLoss` | accuracy / per-class recall |
-| Reconstruction | tensor shaped like the target | MSE, L1, or task-specific loss | reconstruction error |
-
-The loss must still reduce the comparison to one scalar before `backward()` can begin.
-
-## What does repeated training look like in one classification case?
+## What does the rhythm become after many steps?
 
 <TrainingLoop client:visible />
 
-This case study trains a real two-layer network implemented by the site's tiny automatic-differentiation engine. The colored dots are labeled examples. The smooth blue-to-red field is the model’s prediction at every location; the pale contour is where it is equally unsure between the two classes. Early on the field is almost arbitrary. Repeated optimizer steps reshape it around the two moons.
-
-## How are a batch, step, and epoch related?
-
-- A **batch** is the subset used for one gradient estimate.
-- A **step** is one optimizer update.
-- An **epoch** is one pass through the training dataset.
-
-With 1,000 examples and batches of 100, one epoch contains ten steps. Reporting these terms precisely makes experiments comparable.
-
-## Why is validation a different phase?
-
-```python
-model.eval()
-total_correct = 0
-with torch.no_grad():
-    for features, targets in val_loader:
-        logits = model(features)
-        total_correct += (logits.argmax(1) == targets).sum().item()
-```
-
-`train()` and `eval()` change the behavior of modules such as dropout and batch normalization. They do not enable or disable gradients; `no_grad()` handles that separately.
-
-<Callout type="tip" title="Log enough to debug">
-Track training loss, validation loss, the learning rate, and at least one task metric. A single final accuracy hides whether learning was stable or accidental.
-</Callout>
-
-## Where do real-world additions fit?
-
-Learning-rate schedulers normally advance after an optimizer step or epoch. Gradient clipping belongs after `backward()` and before `step()`. Mixed precision wraps the forward and loss calculation, then scales backward and the update. Gradient accumulation repeats forward/backward for several mini-batches before stepping. These tools modify the rhythm; they do not erase it.
-
-## What evidence should a training loop record?
-
-Record enough to distinguish three failures: the model cannot fit the training data, the fit does not transfer to validation data, or optimization is unstable. At minimum, keep training and validation loss, a task-relevant metric, learning rate, epoch, and the exact configuration or checkpoint that produced them.
+One step changes parameters once. Repeating steps reshapes the model’s predictions; here the background changes as a tiny network learns two classes.
 
 <Quiz client:visible question="Why clear gradients before backward rather than after optimizer.step()?" answer="Either placement can work if it happens exactly once per step, but clearing immediately before the forward/backward pair makes the lifecycle explicit and avoids accidentally accumulating gradients across batches." />

@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,examplesPerSecond,generalizationLoss,linearParameterCount,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,softmax2,splitCounts,tensorStorageMB} from './curriculum';
+import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,linearParameterCount,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,softmax2,splitCounts,tensorStorageMB} from './curriculum';
 
 describe('course visual calculations',()=>{
   it('matches the default neuron arithmetic',()=>{
@@ -61,5 +61,27 @@ describe('course visual calculations',()=>{
   it('reads editable scalar and vector values from marked PyTorch code',()=>{
     expect(parseTuneValues('lr = 0.05 # tune:lr','lr',[1])).toEqual([.05]);
     expect(parseTuneValues('x = torch.tensor([0.2, 0.8, -0.3]) # tune:x','x',[])).toEqual([.2,.8,-.3]);
+  });
+  it('estimates per-device Adam memory under DDP',()=>{
+    const memory=estimateTrainingMemory({parametersMillions:100,microBatch:8,savedActivationMillionsPerSample:20,activationBits:16,optimizer:'adam',devices:4,strategy:'ddp',reservePercent:15});
+    expect(memory.weights).toBeCloseTo(.372529);
+    expect(memory.gradients).toBeCloseTo(.372529);
+    expect(memory.optimizer).toBeCloseTo(.745058);
+    expect(memory.activations).toBeCloseTo(.298023);
+    expect(memory.total).toBeCloseTo(2.05636,4);
+  });
+  it('shards gradients and optimizer state under ZeRO stage 2',()=>{
+    const memory=estimateTrainingMemory({parametersMillions:100,microBatch:8,savedActivationMillionsPerSample:20,activationBits:16,optimizer:'adam',devices:4,strategy:'zero2',reservePercent:15});
+    expect(memory.weights).toBeCloseTo(.372529);
+    expect(memory.gradients).toBeCloseTo(.093132);
+    expect(memory.optimizer).toBeCloseTo(.186265);
+    expect(memory.activations).toBeCloseTo(.298023);
+  });
+  it('connects micro-batch, accumulation, throughput, and epoch time',()=>{
+    const scale=estimateTrainingScale({datasetExamples:100000,microBatch:8,devices:4,accumulationSteps:2,microStepMilliseconds:100});
+    expect(scale.globalBatch).toBe(64);
+    expect(scale.optimizerStepsPerEpoch).toBe(1563);
+    expect(scale.throughput).toBe(320);
+    expect(scale.epochSeconds).toBeCloseTo(312.6);
   });
 });

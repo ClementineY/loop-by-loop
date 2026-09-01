@@ -36,13 +36,95 @@ FP16 has limited numerical range, so gradient scaling makes tiny gradients less 
 
 ## What actually consumes training memory?
 
-Training memory is a sum: parameters, gradients, optimizer state, saved activations, temporary workspaces, allocator fragmentation, and the current batch. For FP32 Adam, parameters, gradients, and two optimizer moments alone are commonly about 16 bytes per parameter. Standard automatic mixed precision often reduces selected activation storage and compute cost while keeping FP32 parameters and optimizer state.
+Start with four quantities:
 
-Gradient checkpointing saves fewer activations but recomputes part of the forward pass during backward; it exchanges time for memory.
+- `P`: number of trainable parameters;
+- `Bμ`: micro-batch size on one device;
+- `A`: saved activation elements per sample;
+- `b_act`: bytes per saved activation element—normally 4 for FP32 or 2 for FP16/BF16.
+
+The first planning estimate is:
+
+```text
+parameter memory = P × 4 bytes
+gradient memory  = P × 4 bytes
+optimizer memory = P × optimizer-state bytes per parameter
+activation memory ≈ Bμ × A × b_act
+
+peak per device ≈ parameters + gradients + optimizer + activations
+                  + temporary-workspace reserve
+```
+
+For the common FP32 parameter-and-gradient case:
+
+| Optimizer | Extra state | Parameters + gradients + optimizer |
+| --- | ---: | ---: |
+| SGD | none | about `8 × P` bytes |
+| SGD with momentum | one momentum value | about `12 × P` bytes |
+| Adam / AdamW | first and second moments | about `16 × P` bytes |
+
+Standard automatic mixed precision usually leaves parameters, gradients, and optimizer moments in FP32. Its largest memory saving often comes from eligible saved activations—not from dividing the entire estimate by two.
+
+### Concrete estimate: a 100-million-parameter model
+
+Suppose Adam trains a `100M`-parameter model with a micro-batch of `8`. A dry-run estimate says backward must retain about `20M` activation elements per sample, stored in BF16:
+
+```text
+parameters = 100M × 4 B                 = 0.37 GiB
+gradients  = 100M × 4 B                 = 0.37 GiB
+Adam state = 100M × 8 B                 = 0.75 GiB
+activations = 8 × 20M × 2 B             = 0.30 GiB
+subtotal                                   1.79 GiB
+15% planning reserve                       0.27 GiB
+estimated peak per DDP device              2.06 GiB
+```
+
+This estimate deliberately excludes model-specific buffers and kernel workspaces, so it is a planning floor rather than a guarantee.
+
+### What changes across devices?
+
+With ordinary DDP, every device keeps a full copy of parameters, gradients, and optimizer state. More devices increase global batch and throughput, but do not divide this persistent memory. ZeRO-style sharding changes the divisors:
+
+| Strategy | Parameters | Gradients | Optimizer state |
+| --- | ---: | ---: | ---: |
+| DDP | full | full | full |
+| ZeRO-1 | full | full | `÷ devices` |
+| ZeRO-2 | full | `÷ devices` | `÷ devices` |
+| ZeRO-3 / full sharding | `÷ devices` | `÷ devices` | `÷ devices` |
+
+Activations remain tied to the local micro-batch unless activation-specific sharding or sequence parallelism is used. Gradient checkpointing reduces saved activation memory by recomputing forward operations during backward; gradient accumulation increases global batch without retaining several computation graphs at once in the ordinary implementation.
+
+### Calibrate the estimate before a large run
+
+Measure one representative training step, not only a forward pass:
+
+```python
+torch.cuda.reset_peak_memory_stats()
+
+optimizer.zero_grad(set_to_none=True)
+loss = loss_fn(model(x), y)
+loss.backward()
+optimizer.step()
+
+peak_gib = torch.cuda.max_memory_allocated() / 1024**3
+print(f"peak allocated: {peak_gib:.2f} GiB")
+```
+
+If static state uses `M_static` and a measured micro-batch `B₁` peaks at `M₁`, a useful first extrapolation is `M(B₂) ≈ M_static + (B₂ / B₁) × (M₁ − M_static)`. Validate the next batch size rather than assuming activations scale perfectly linearly.
 
 ## Is higher throughput the same as better training?
 
-No. Throughput measures examples or tokens processed per second. Time-to-quality asks how long it takes to reach a useful validation result. A larger batch may raise hardware utilization while needing learning-rate changes or more processed examples. Record step time, data-loading time, device utilization, and validation quality per unit of wall-clock time.
+No. Connect the batch vocabulary first:
+
+```text
+global batch = micro-batch/device × devices × accumulation steps
+optimizer steps/epoch = ceil(dataset examples ÷ global batch)
+update time ≈ accumulation steps × measured micro-step time
+throughput ≈ global batch ÷ update time
+time/epoch ≈ optimizer steps/epoch × update time
+```
+
+These are idealized compute estimates. Distributed synchronization and input loading add time. A larger batch may raise hardware utilization while needing learning-rate changes or more processed examples, so the final measure is time-to-quality: wall-clock time required to reach a chosen validation result.
 
 ## When does quantization error matter for training?
 

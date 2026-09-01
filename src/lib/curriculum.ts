@@ -87,3 +87,29 @@ export function parseTuneValues(source:string,key:string,fallback:number[]) {
   const values=(line.split('#')[0].match(/-?\d+(?:\.\d+)?/g)||[]).map(Number);
   return values.length?values:fallback;
 }
+
+export type OptimizerMemory='sgd'|'momentum'|'adam';
+export type ShardingStrategy='ddp'|'zero1'|'zero2'|'zero3';
+export function estimateTrainingMemory(options:{parametersMillions:number;microBatch:number;savedActivationMillionsPerSample:number;activationBits:16|32;optimizer:OptimizerMemory;devices:number;strategy:ShardingStrategy;reservePercent:number}) {
+  const parameters=options.parametersMillions*1e6,devices=Math.max(1,options.devices),gib=1024**3;
+  const shardParameters=options.strategy==='zero3'?devices:1;
+  const shardGradients=options.strategy==='zero2'||options.strategy==='zero3'?devices:1;
+  const shardOptimizer=options.strategy==='ddp'?1:devices;
+  const optimizerBytesPerParameter=options.optimizer==='adam'?8:options.optimizer==='momentum'?4:0;
+  const weights=parameters*4/shardParameters/gib;
+  const gradients=parameters*4/shardGradients/gib;
+  const optimizer=parameters*optimizerBytesPerParameter/shardOptimizer/gib;
+  const activations=options.microBatch*options.savedActivationMillionsPerSample*1e6*(options.activationBits/8)/gib;
+  const subtotal=weights+gradients+optimizer+activations;
+  const reserve=subtotal*options.reservePercent/100;
+  return {weights,gradients,optimizer,activations,reserve,total:subtotal+reserve,optimizerBytesPerParameter};
+}
+
+export function estimateTrainingScale(options:{datasetExamples:number;microBatch:number;devices:number;accumulationSteps:number;microStepMilliseconds:number}) {
+  const globalBatch=options.microBatch*options.devices*options.accumulationSteps;
+  const optimizerStepsPerEpoch=Math.ceil(options.datasetExamples/globalBatch);
+  const updateMilliseconds=options.microStepMilliseconds*options.accumulationSteps;
+  const throughput=globalBatch/(updateMilliseconds/1000);
+  const epochSeconds=optimizerStepsPerEpoch*updateMilliseconds/1000;
+  return {globalBatch,optimizerStepsPerEpoch,updateMilliseconds,throughput,epochSeconds};
+}

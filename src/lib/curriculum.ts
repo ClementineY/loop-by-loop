@@ -164,3 +164,31 @@ export function controlFlowCompilePlan(mode:ControlFlowMode,shape:number,predica
   if(mode==='tensor-if')return {branch,cacheKey:`shape:${shape}|branch:${branch}`,graphBreak:true,guard:`shape == [${shape}]`,regions:['prefix FX graph','Python branch decision',`${branch} continuation graph`],capturesBothBranches:false};
   return {branch,cacheKey:`shape:${shape}|cond`,graphBreak:false,guard:`shape == [${shape}]`,regions:['FX graph with cond','true branch subgraph','false branch subgraph'],capturesBothBranches:true};
 }
+
+export type CompileCornerCase='fixed-loop'|'tensor-loop'|'scalar-item'|'shape-branch'|'cond-contract';
+export function compileCornerCasePlan(kind:CompileCornerCase,option:number|boolean) {
+  if(kind==='fixed-loop'){
+    const iterations=Number(option);
+    return {outcome:'captured',guard:`steps == ${iterations}`,graphBreak:false,nodeCount:iterations*2,regions:Array.from({length:iterations},(_,index)=>`iteration ${index+1}`)};
+  }
+  if(kind==='tensor-loop'){
+    const structured=Boolean(option);
+    return structured
+      ? {outcome:'inference only',guard:'carried tensor metadata stays compatible',graphBreak:false,nodeCount:2,regions:['while_loop condition subgraph','while_loop body subgraph']}
+      : {outcome:'Python loop',guard:null,graphBreak:true,nodeCount:2,regions:['compiled prefix','Python tests tensor each iteration']};
+  }
+  if(kind==='scalar-item'){
+    const captureScalar=Boolean(option);
+    return captureScalar
+      ? {outcome:'scalar captured',guard:'backend must support the scalar expression',graphBreak:false,nodeCount:3,regions:['sum','item as graph scalar','multiply']}
+      : {outcome:'scalar escapes to Python',guard:null,graphBreak:true,nodeCount:3,regions:['sum FX region','Python scalar','multiply continuation']};
+  }
+  if(kind==='shape-branch'){
+    const batch=Number(option),small=batch<=16;
+    return {outcome:small?'small path':'large path',guard:small?'batch <= 16':'batch > 16',graphBreak:false,nodeCount:2,regions:[small?'small-batch branch':'large-batch branch','specialized FX graph']};
+  }
+  const compatible=Boolean(option);
+  return compatible
+    ? {outcome:'captured cond',guard:'branch outputs have compatible metadata',graphBreak:false,nodeCount:3,regions:['cond','true subgraph [N, D]','false subgraph [N, D]']}
+    : {outcome:'capture error',guard:null,graphBreak:false,nodeCount:2,regions:['true output [N, D]','false output [N]']};
+}

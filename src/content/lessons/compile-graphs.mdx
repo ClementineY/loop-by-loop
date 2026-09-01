@@ -8,6 +8,7 @@ concepts: [torch.compile, TorchDynamo, FX graph, graph break, guards, torch.cond
 duration: 15
 ---
 import CompileControlFlowLab from '../../components/widgets/CompileControlFlowLab.svelte';
+import CompileCornerCasesLab from '../../components/widgets/CompileCornerCasesLab.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
@@ -47,6 +48,20 @@ compiled_model = torch.compile(model, dynamic=True)
 ```
 
 The goal is not “zero recompilations at any cost.” It is a bounded number of useful graph variants that are reused often enough to repay compilation time.
+
+## Which corner cases break the simple picture?
+
+Control flow has two separate questions: **can Dynamo observe it?** and **is there a useful graph representation for it?** A fixed Python loop can be observed but may create an enormous unrolled graph. A tensor-driven loop cannot be unrolled in advance. A scalar extracted with `.item()` crosses into Python by default. Even structured operators require strict, capturable branch or loop-body contracts.
+
+<CompileCornerCasesLab client:visible />
+
+Other boundaries to remember:
+
+- `fullgraph=True` turns the first graph break into an error. It is a diagnostic and deployment constraint, not a way to make unsupported Python capturable.
+- Dynamic shapes mean symbolic dimensions, not dynamic rank. A branch such as `x.shape[0] <= 16` can still produce range guards and more than one compiled variant.
+- Many changing Python values can create a recompilation storm. Once the configured recompilation limit is reached, the affected function can fall back to eager execution rather than compile variants forever.
+- A graph break is not automatically a serious performance bug. A stable break before preprocessing may be cheap; repeated breaks inside the hot middle of a model can prevent fusion and add overhead.
+- Random tensor operations are not the same as Python control flow: a random operator can live in a graph, while using its sampled tensor value in a Python `if` introduces a data-dependent decision.
 
 ## When should `torch.cond` replace a Python branch?
 

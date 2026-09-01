@@ -1,0 +1,24 @@
+---
+title: Five compile corner cases
+module: M2 · Autograd
+order: 4.3
+summary: Change one condition at a time and watch what happens to capture.
+colab: m2_autograd.ipynb
+concepts: [loop unrolling, torch.while_loop, scalar capture, dynamic shapes, torch.cond]
+duration: 10
+---
+import CompileCornerCasesLab from '../../components/widgets/CompileCornerCasesLab.svelte';
+
+## Change one thing
+
+Choose a case, change its input, and read the graph—not a wall of explanation.
+
+<CompileCornerCasesLab client:visible />
+
+## Debug your own graph
+
+```bash
+TORCH_LOGS="graph_breaks,recompiles" python train.py
+```
+
+Use `torch.compile(fn, fullgraph=True)` when you want the first break to become an error.

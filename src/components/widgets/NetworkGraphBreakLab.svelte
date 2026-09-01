@@ -1,70 +1,107 @@
 <script lang="ts">
+  import {onMount} from 'svelte';
   import {networkGraphBreakPlan,type NetworkCaptureMode} from '../../lib/curriculum';
-  const modes:{id:NetworkCaptureMode;label:string}[]=[
-    {id:'eager-network',label:'Eager'},
-    {id:'python-network',label:'compile + Python if'},
-    {id:'cond-network',label:'compile + torch.cond'}
+
+  let canvas:HTMLCanvasElement,step=0,predicate=true,playing=false,frame=0;
+  let animation=0,timer:ReturnType<typeof setInterval>|undefined;
+  const stories=[
+    {title:'1 · Python runs the network',note:'Activations light one route. Autograd records what ran.',mode:'eager-network' as NetworkCaptureMode,line:0},
+    {title:'2 · The value reaches if',note:'Python needs a real True or False before it can continue.',mode:'python-network' as NetworkCaptureMode,line:1},
+    {title:'3 · Capture stops here',note:'The network still runs, but the compiler now has two regions.',mode:'python-network' as NetworkCaptureMode,line:1},
+    {title:'4 · Make the fork explicit',note:'torch.cond keeps both branches inside one compiled graph.',mode:'cond-network' as NetworkCaptureMode,line:2}
   ];
-  let mode:NetworkCaptureMode='python-network',predicate=true,phase:'forward'|'backward'='forward';
-  $: plan=networkGraphBreakPlan(mode,predicate);
-  $: code=mode==='cond-network'?`class TinyRouter(nn.Module):
-    def forward(self, x):
-        h = F.relu(self.stem(x))
-        pred = h.mean() > 0
-        h = torch.cond(
-            pred, self.expert_a,
-            self.expert_b, (h,)
-        )
-        return self.head(h)`:`class TinyRouter(nn.Module):
-    def forward(self, x):
-        h = F.relu(self.stem(x))
-        if h.mean() > 0:
-            h = self.expert_a(h)
-        else:
-            h = self.expert_b(h)
-        return self.head(h)`;
-  $: regionLabel=mode==='eager-network'?'runtime autograd graph':mode==='python-network'?'two FX regions + Python':'one FX graph with cond';
+  const pythonCode=[
+    'h = torch.relu(self.stem(x))',
+    'if h.mean() > 0:',
+    '    h = self.expert_a(h)',
+    'else:',
+    '    h = self.expert_b(h)',
+    'return self.head(h)'
+  ],condCode=[
+    'h = torch.relu(self.stem(x))',
+    'pred = h.mean() > 0',
+    'h = torch.cond(pred, self.expert_a,',
+    '               self.expert_b, (h,))',
+    'return self.head(h)'
+  ];
+  $: story=stories[step];
+  $: plan=networkGraphBreakPlan(story.mode,predicate);
+  $: code=step===3?condCode:pythonCode;
+
+  const layers={
+    input:[[70,105],[70,160],[70,215]],
+    stem:[[225,75],[225,130],[225,190],[225,245]],
+    gate:[[390,160]],
+    a:[[555,80],[555,125],[555,170]],
+    b:[[555,200],[555,245]],
+    head:[[710,125],[710,195]],
+    loss:[[835,160]]
+  } as const;
+
+  function draw(){
+    if(!canvas)return;
+    const dpr=Math.min(devicePixelRatio||1,2),rect=canvas.getBoundingClientRect();
+    if(canvas.width!==Math.round(rect.width*dpr)||canvas.height!==Math.round(rect.height*dpr)){canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr)}
+    const ctx=canvas.getContext('2d');if(!ctx)return;
+    const sx=rect.width/900,sy=rect.height/320;ctx.setTransform(dpr*sx,0,0,dpr*sy,0,0);ctx.clearRect(0,0,900,320);
+    const activeBranch=predicate?'a':'b',pulse=(frame%180)/180;
+    const edge=(from:readonly number[],to:readonly number[],active:boolean,color='#76b9ff')=>{
+      ctx.beginPath();ctx.moveTo(from[0],from[1]);ctx.lineTo(to[0],to[1]);ctx.strokeStyle=active?color:'rgba(130,150,176,.13)';ctx.lineWidth=active?1.7:1;ctx.stroke();
+      if(active){const t=pulse,x=from[0]+(to[0]-from[0])*t,y=from[1]+(to[1]-from[1])*t;ctx.beginPath();ctx.arc(x,y,2.8,0,Math.PI*2);ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=12;ctx.fill();ctx.shadowBlur=0}
+    };
+    const connect=(from:readonly (readonly number[])[],to:readonly (readonly number[])[],active:boolean,color?:string)=>from.forEach(a=>to.forEach(b=>edge(a,b,active,color)));
+    const beforeDecision=step!==1||pulse<.68;
+    connect(layers.input,layers.stem,beforeDecision);
+    connect(layers.stem,layers.gate,beforeDecision);
+    const afterDecision=step===0||step===3||step===2;
+    connect(layers.gate,layers.a,afterDecision&&activeBranch==='a',step===3?'#77e0b5':'#76b9ff');
+    connect(layers.gate,layers.b,afterDecision&&activeBranch==='b',step===3?'#77e0b5':'#ffb45d');
+    connect(layers.a,layers.head,afterDecision&&activeBranch==='a',step===3?'#77e0b5':'#76b9ff');
+    connect(layers.b,layers.head,afterDecision&&activeBranch==='b',step===3?'#77e0b5':'#ffb45d');
+    connect(layers.head,layers.loss,afterDecision,step===3?'#77e0b5':'#76b9ff');
+
+    if(step===2){
+      ctx.fillStyle='rgba(77,142,210,.07)';ctx.fillRect(35,35,390,250);ctx.strokeStyle='rgba(118,185,255,.55)';ctx.strokeRect(35,35,390,250);
+      ctx.fillStyle='rgba(165,109,207,.07)';ctx.fillRect(515,35,355,250);ctx.strokeStyle='rgba(201,151,240,.55)';ctx.strokeRect(515,35,355,250);
+      ctx.setLineDash([5,7]);ctx.strokeStyle='#ff7860';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(470,30);ctx.lineTo(470,290);ctx.stroke();ctx.setLineDash([]);
+      label(ctx,'FX graph 1',52,58,'#76b9ff');label(ctx,'FX graph 2',532,58,'#d9a4ff');label(ctx,'Python',446,308,'#ff8b72');
+    }
+    if(step===3){
+      ctx.fillStyle='rgba(80,205,156,.055)';ctx.fillRect(35,35,835,250);ctx.strokeStyle='rgba(119,224,181,.62)';ctx.lineWidth=1.5;ctx.strokeRect(35,35,835,250);
+      ctx.setLineDash([4,5]);ctx.strokeStyle='rgba(119,224,181,.55)';ctx.strokeRect(510,55,95,215);ctx.setLineDash([]);label(ctx,'one FX graph',52,58,'#77e0b5');label(ctx,'cond',533,290,'#77e0b5');
+    }
+    if(step===1){ctx.beginPath();ctx.arc(390,160,28+5*Math.sin(frame/14),0,Math.PI*2);ctx.strokeStyle='#ff7860';ctx.lineWidth=2;ctx.stroke();label(ctx,'Python needs bool',329,215,'#ff8b72')}
+
+    const node=(point:readonly number[],active:boolean,color='#76b9ff',radius=8)=>{
+      ctx.beginPath();ctx.arc(point[0],point[1],radius,0,Math.PI*2);ctx.fillStyle=active?'#111925':'#111925';ctx.fill();ctx.strokeStyle=active?color:'rgba(148,164,187,.42)';ctx.lineWidth=active?2:1.2;ctx.shadowColor=active?color:'transparent';ctx.shadowBlur=active?10:0;ctx.stroke();ctx.shadowBlur=0;
+    };
+    layers.input.forEach(p=>node(p,true));layers.stem.forEach(p=>node(p,true));node(layers.gate[0],true,step===1||step===2?'#ff7860':'#f1d35d',11);
+    layers.a.forEach(p=>node(p,activeBranch==='a',step===3?'#77e0b5':'#76b9ff'));
+    layers.b.forEach(p=>node(p,activeBranch==='b',step===3?'#77e0b5':'#ffb45d'));
+    layers.head.forEach(p=>node(p,afterDecision,step===3?'#77e0b5':'#76b9ff'));layers.loss.forEach(p=>node(p,afterDecision,'#f1d35d',10));
+    label(ctx,'input',52,275);label(ctx,'stem',206,275);label(ctx,'if',382,275);label(ctx,'expert A',527,295);label(ctx,'expert B',527,312);label(ctx,'head',693,275);label(ctx,'loss',820,275);
+  }
+  function label(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,color='rgba(190,203,220,.75)'){ctx.fillStyle=color;ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';ctx.fillText(text,x,y)}
+  function select(next:number){step=next;frame=0;draw()}
+  function togglePlay(){playing=!playing;if(playing){timer=setInterval(()=>select((step+1)%stories.length),2100)}else if(timer)clearInterval(timer)}
+  onMount(()=>{
+    const observer=new ResizeObserver(draw);observer.observe(canvas);
+    const loop=()=>{frame++;draw();animation=requestAnimationFrame(loop)};loop();
+    return()=>{observer.disconnect();cancelAnimationFrame(animation);if(timer)clearInterval(timer)};
+  });
 </script>
 
-<section class="lab" aria-labelledby="network-tree-title">
-  <header><div><span>Model graph lab</span><h3 id="network-tree-title">Where does a network graph break?</h3></div><div class="phase" aria-label="Choose graph direction"><button class:active={phase==='forward'} onclick={()=>phase='forward'}>Forward</button><button class:active={phase==='backward'} onclick={()=>phase='backward'}>Backward</button></div></header>
-  <nav aria-label="Choose execution mode">{#each modes as item}<button class:active={mode===item.id} onclick={()=>mode=item.id}>{item.label}</button>{/each}</nav>
-  <div class="workspace">
-    <div class="code"><div class="filebar">tiny_router.py <span>{regionLabel}</span></div><pre><code>{code}</code></pre></div>
-    <div class="diagram">
-      <div class="controls"><span>activation mean</span><button class:active={predicate} onclick={()=>predicate=true}>&gt; 0</button><button class:active={!predicate} onclick={()=>predicate=false}>≤ 0</button></div>
-      <div class="capture" class:broken={mode==='python-network'}>
-        {#if mode==='eager-network'}<b>Python runs first · autograd records the selected route</b>
-        {:else if mode==='python-network'}<b><span>compiled region 1</span><i>GRAPH BREAK · Python reads the boolean</i><span>compiled continuation</span></b>
-        {:else}<b>one compiled FX graph · cond contains two branch subgraphs</b>{/if}
-      </div>
-      <div class:reverse={phase==='backward'} class="tree" aria-label={`${phase} graph through ${plan.expert}`}>
-        <GraphNode label="input x" detail="[batch, features]" region={mode==='python-network'?'prefix':'whole'}/>
-        <Connector/>
-        <GraphNode label="stem" detail="Linear → ReLU" region={mode==='python-network'?'prefix':'whole'}/>
-        <Connector/>
-        <GraphNode label="h.mean() > 0" detail={mode==='python-network'?'tensor value needed by Python':mode==='cond-network'?'cond predicate stays in graph':'Python chooses the route'} region={mode==='python-network'?'break':'whole'} diamond/>
-        <div class="fork" aria-label="expert branches">
-          <div class:selected={predicate} class:inactive={!predicate}><GraphNode label="expert A" detail="Linear → GELU" region={mode==='python-network'?'continuation':mode==='cond-network'?'branch':'whole'}/><small>{mode==='cond-network'?'captured subgraph':predicate?'executed':'not executed'}</small></div>
-          <div class:selected={!predicate} class:inactive={predicate}><GraphNode label="expert B" detail="Linear → Tanh" region={mode==='python-network'?'continuation':mode==='cond-network'?'branch':'whole'}/><small>{mode==='cond-network'?'captured subgraph':!predicate?'executed':'not executed'}</small></div>
-        </div>
-        <div class="merge">{phase==='forward'?'↘  merge  ↙':'↖  selected gradient  ↗'}</div>
-        <GraphNode label="head" detail="Linear → prediction" region={mode==='python-network'?'continuation':'whole'}/>
-        <Connector/>
-        <GraphNode label="loss" detail={phase==='forward'?'scalar output':'seed gradient = 1'} region={mode==='python-network'?'continuation':'whole'}/>
-      </div>
-      <div class="trace"><small>{phase} route</small><div>{#each (phase==='forward'?['input','stem',plan.expert,'head','loss']:plan.backward) as step}<span>{step}</span>{/each}</div></div>
-      <p>{#if mode==='eager-network'}Only the selected expert becomes part of this call's autograd graph. The next call may record the other route.
-      {:else if mode==='python-network'}The network itself still works. The break means the compiler cannot optimize stem, expert, and head as one region; backward later crosses those region boundaries through autograd.
-      {:else}Both experts are represented in the compiled graph, but only <b>{plan.expert}</b> executes now and only that selected route receives gradients for this call.{/if}</p>
-    </div>
+<section class="story" aria-labelledby="graph-story-title">
+  <header><div><span>Animated graph</span><h3 id="graph-story-title">Watch one graph become two</h3></div><button onclick={togglePlay}>{playing?'Pause':'Play story'}</button></header>
+  <div class="stage">
+    <canvas bind:this={canvas} role="img" aria-label={`${story.title}. ${story.note} Selected path: ${plan.expert}.`}></canvas>
+    <div class="branch"><span>input chooses</span><button class:active={predicate} onclick={()=>predicate=true}>expert A</button><button class:active={!predicate} onclick={()=>predicate=false}>expert B</button></div>
   </div>
-  <footer><span><i class="swatch prefix"></i>first FX region</span><span><i class="swatch break"></i>Python boundary</span><span><i class="swatch continuation"></i>continuation FX region</span><span><i class="swatch branch"></i>structured subgraph</span></footer>
+  <div class="steps" aria-label="Choose story step">{#each stories as item,index}<button class:active={step===index} onclick={()=>select(index)}><i>{index+1}</i><span>{item.title.replace(/^\d · /,'')}</span></button>{/each}</div>
+  <div class="caption"><b>{story.title}</b><span>{story.note}</span></div>
+  <pre aria-label="Relevant PyTorch code">{#each code as line,index}<code class:hot={index===story.line}>{line}</code>{/each}</pre>
 </section>
 
-{#snippet GraphNode(label:string,detail:string,region:string,diamond=false)}<div class:diamond class={`node ${region}`}><b>{label}</b><span>{detail}</span></div>{/snippet}
-{#snippet Connector()}<i class="connector">{phase==='forward'?'↓':'↑'}</i>{/snippet}
-
 <style>
-  .lab{margin:1.5rem 0;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;box-shadow:0 16px 45px var(--shadow)}header{display:flex;align-items:center;justify-content:space-between;padding:1rem}header span{font:800 .58rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}header h3{margin:.2rem 0}.phase{display:flex}.phase button,.controls button{border:1px solid var(--border);background:var(--bg);color:var(--text);padding:.4rem .55rem;font-size:.54rem}.phase button.active,.controls button.active{background:var(--accent);border-color:var(--accent);color:white}nav{display:grid;grid-template-columns:repeat(3,1fr);border-block:1px solid var(--border)}nav button{border:0;border-right:1px solid var(--border);padding:.65rem;background:var(--bg);color:var(--text-muted);font-size:.58rem}nav button:last-child{border:0}nav button.active{background:var(--accent);color:white}.workspace{display:grid;grid-template-columns:.78fr 1.3fr;min-height:660px;background:#111925;color:white}.code{border-right:1px solid #303b4c}.filebar{display:flex;justify-content:space-between;padding:.55rem .7rem;background:#1b2634;color:#a0adbd;font:.55rem var(--font-mono)}.filebar span{color:#748398}.code pre{box-sizing:border-box;margin:0;padding:1rem;overflow:auto;color:#dce4ed;font:.57rem/1.65 var(--font-mono)}.diagram{display:flex;flex-direction:column;padding:.8rem}.controls{display:flex;align-items:center;gap:.3rem}.controls>span{margin-right:auto;color:#8e9caf;font-size:.51rem}.controls button{border-color:#3d4a5d;background:#182332;color:#bdc7d5}.controls button.active{border-color:#df7656;background:#182332;color:#ff9b79}.capture{margin:.65rem 0;padding:.45rem .55rem;border:1px solid #526987;border-radius:5px;background:#182535;text-align:center}.capture b{font:.5rem var(--font-mono);color:#b9c6d6}.capture.broken b{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.35rem}.capture.broken span{color:#a8c2e2}.capture.broken i{padding:.25rem .35rem;border:1px solid #df6540;background:#32231f;color:#ff9b79;font-style:normal}.tree{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center}.node{box-sizing:border-box;width:155px;padding:.5rem .6rem;border:1px solid #637997;border-radius:6px;background:#192433;text-align:center}.node b,.node span{display:block}.node b{font-size:.56rem}.node span{margin-top:.18rem;color:#95a4b6;font-size:.47rem}.node.prefix{border-color:#6d91bd;background:#18283b}.node.continuation{border-color:#9b7db5;background:#282138}.node.break{border-color:#df6540;background:#32231f}.node.branch{border-color:#69a391;background:#17302d}.node.diamond{width:180px}.connector{height:18px;color:#77879a;font:normal .7rem/18px var(--font-mono)}.fork{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;width:min(100%,390px);padding-top:22px}.fork:before{content:"";position:absolute;top:8px;left:25%;right:25%;height:12px;border-top:1px solid #64758a;border-inline:1px solid #64758a}.fork>div{display:flex;flex-direction:column;align-items:center;opacity:.32}.fork>div.selected{opacity:1}.fork>div.inactive .node{border-style:dashed}.fork small{margin-top:.22rem;color:#758498;font-size:.44rem}.merge{height:25px;color:#758498;font:.48rem/25px var(--font-mono)}.reverse .fork>div:not(.selected){opacity:.16}.trace{margin-top:.45rem;padding-top:.55rem;border-top:1px solid #303b4b}.trace small{color:#758498;font:.46rem var(--font-mono)}.trace div{display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.3rem}.trace span{padding:.2rem .35rem;background:#1e2a39;color:#b6c1cf;font:.46rem var(--font-mono)}.trace span+span:before{content:"→";margin-right:.35rem;color:#6f7e91}.diagram>p{min-height:2.2rem;margin:.55rem 0 0;color:#9eabba;font-size:.52rem;line-height:1.45}footer{display:flex;gap:1rem;flex-wrap:wrap;padding:.65rem 1rem;background:var(--accent-soft)}footer span{display:flex;align-items:center;gap:.3rem;color:var(--text-muted);font:.49rem var(--font-mono)}.swatch{width:11px;height:11px;border:1px solid}.swatch.prefix{border-color:#6d91bd;background:#18283b}.swatch.break{border-color:#df6540;background:#32231f}.swatch.continuation{border-color:#9b7db5;background:#282138}.swatch.branch{border-color:#69a391;background:#17302d}@media(max-width:760px){.workspace{grid-template-columns:1fr}.code{border-right:0;border-bottom:1px solid #303b4c}.diagram{min-height:650px}.capture.broken b{grid-template-columns:1fr}.fork{gap:.6rem}.node{width:130px}footer{gap:.55rem}}@media(max-width:420px){header{align-items:flex-start;gap:.5rem;flex-direction:column}.phase{width:100%}.phase button{flex:1}.filebar span{display:none}.fork{gap:.25rem}.node{width:112px;padding:.45rem .25rem}.node.diamond{width:150px}.capture.broken i{font-size:.44rem}}
+  .story{margin:1.5rem 0;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#090d14;color:#e8edf4;box-shadow:0 16px 45px var(--shadow)}header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem;border-bottom:1px solid #253043}header span{font:800 .56rem var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:#76b9ff}header h3{margin:.15rem 0 0;color:#f1f5fa}header button,.branch button{border:1px solid #334157;background:#111925;color:#c0cad8;padding:.4rem .6rem;font-size:.54rem}header button{border-color:#76b9ff;color:#9fd0ff}.stage{position:relative}.stage canvas{display:block;width:100%;height:330px}.branch{position:absolute;top:.7rem;right:.75rem;display:flex;align-items:center;gap:.25rem}.branch span{margin-right:.25rem;color:#75849a;font-size:.48rem}.branch button.active{border-color:#f1d35d;color:#f1d35d}.steps{display:grid;grid-template-columns:repeat(4,1fr);border-block:1px solid #253043}.steps button{display:flex;align-items:center;gap:.4rem;border:0;border-right:1px solid #253043;background:#0d131d;color:#738299;padding:.55rem;text-align:left;font-size:.5rem}.steps button:last-child{border:0}.steps button.active{background:#162131;color:#eef3f8}.steps i{display:grid;place-items:center;width:19px;height:19px;border:1px solid currentColor;border-radius:50%;font-style:normal}.caption{display:flex;align-items:baseline;gap:.65rem;padding:.7rem 1rem}.caption b{color:#f1d35d;font:.62rem var(--font-mono)}.caption span{color:#a8b4c4;font-size:.54rem}pre{display:grid;grid-template-columns:1fr 1fr;margin:0;padding:.65rem 1rem 1rem;border-top:1px solid #1d2737;column-gap:1rem;color:#67768a;font:.5rem/1.55 var(--font-mono)}pre code{padding:0 .3rem;border-left:2px solid transparent;white-space:pre}pre code.hot{border-color:#ff7860;background:#201919;color:#f0f3f7}@media(max-width:700px){.stage canvas{height:290px}.branch{position:static;padding:.55rem .7rem;border-top:1px solid #253043}.steps{grid-template-columns:1fr 1fr}.caption{align-items:flex-start;flex-direction:column;gap:.2rem}pre{grid-template-columns:1fr}}@media(max-width:420px){header{align-items:flex-start;gap:.5rem;flex-direction:column}header button{width:100%}.stage canvas{height:250px}.steps button span{display:none}}
 </style>

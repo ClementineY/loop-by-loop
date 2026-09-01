@@ -192,3 +192,11 @@ export function compileCornerCasePlan(kind:CompileCornerCase,option:number|boole
     ? {outcome:'captured cond',guard:'branch outputs have compatible metadata',graphBreak:false,nodeCount:3,regions:['cond','true subgraph [N, D]','false subgraph [N, D]']}
     : {outcome:'capture error',guard:null,graphBreak:false,nodeCount:2,regions:['true output [N, D]','false output [N]']};
 }
+
+export type NetworkCaptureMode='eager-network'|'python-network'|'cond-network';
+export function networkGraphBreakPlan(mode:NetworkCaptureMode,predicate:boolean) {
+  const expert=predicate?'expert A':'expert B';
+  if(mode==='eager-network')return {expert,graphBreaks:0,capturedBranches:1,regions:['one runtime autograd path'],backward:['loss','head',expert,'stem']};
+  if(mode==='python-network')return {expert,graphBreaks:1,capturedBranches:1,regions:['stem + predicate FX','Python decision',`${expert} + head FX`],backward:['loss','compiled head',`compiled ${expert}`,'Python boundary','compiled stem']};
+  return {expert,graphBreaks:0,capturedBranches:2,regions:['stem','cond with expert A + expert B','head'],backward:['loss','head',`selected ${expert}`,'stem']};
+}

@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {bestValidationEpoch,binaryTrainingStep,compileCornerCasePlan,controlFlowCompilePlan,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,gradientScalingTrace,linearParameterCount,matrix2x2Trace,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,roundToBFloat16,roundToFloat16,softmax2,splitCounts,tensorStorageMB} from './curriculum';
+import {bestValidationEpoch,binaryTrainingStep,compileCornerCasePlan,controlFlowCompilePlan,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,gradientScalingTrace,linearParameterCount,matrix2x2Trace,multiclassTrainingStep,networkGraphBreakPlan,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,roundToBFloat16,roundToFloat16,softmax2,splitCounts,tensorStorageMB} from './curriculum';
 
 describe('course visual calculations',()=>{
   it('matches the default neuron arithmetic',()=>{
@@ -119,5 +119,12 @@ describe('course visual calculations',()=>{
     expect(compileCornerCasePlan('shape-branch',16).guard).toBe('batch <= 16');
     expect(compileCornerCasePlan('shape-branch',64).guard).toBe('batch > 16');
     expect(compileCornerCasePlan('cond-contract',false).outcome).toBe('capture error');
+  });
+  it('keeps the model branch graph distinct from compiler regions',()=>{
+    expect(networkGraphBreakPlan('eager-network',true).backward).toEqual(['loss','head','expert A','stem']);
+    expect(networkGraphBreakPlan('python-network',false).regions).toEqual(['stem + predicate FX','Python decision','expert B + head FX']);
+    expect(networkGraphBreakPlan('python-network',true).graphBreaks).toBe(1);
+    expect(networkGraphBreakPlan('cond-network',false).capturedBranches).toBe(2);
+    expect(networkGraphBreakPlan('cond-network',false).backward).toContain('selected expert B');
   });
 });

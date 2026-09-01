@@ -9,6 +9,7 @@ duration: 15
 ---
 import CompileControlFlowLab from '../../components/widgets/CompileControlFlowLab.svelte';
 import CompileCornerCasesLab from '../../components/widgets/CompileCornerCasesLab.svelte';
+import NetworkGraphBreakLab from '../../components/widgets/NetworkGraphBreakLab.svelte';
 import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
@@ -25,6 +26,14 @@ This flexibility—not in-place graph modification—is the important distinctio
 For training, captured forward regions pass through AOTAutograd, which creates corresponding backward graph regions. Calling `.backward()` still enters the autograd engine; compiled backward regions behave like larger recorded operations within that execution.
 
 <CompileControlFlowLab client:visible />
+
+## Where does the break sit inside a neural network?
+
+A neural network is usually a computation **DAG**, not a strict tree: branches can split, merge, and reconnect through residual paths. But a tree-like module view is the most intuitive way to locate a control-flow boundary. In this tiny routed network, the stem computes a hidden representation, Python chooses one expert, and the head produces the prediction.
+
+<NetworkGraphBreakLab client:visible />
+
+The orange boundary does not cut gradient flow or make the result incorrect. It cuts the compiler's optimization region. Eager autograd still connects the operations that actually executed, while `torch.cond` gives the compiler an explicit fork-and-merge structure without executing both experts.
 
 ## What happens when Python reaches an `if`?
 

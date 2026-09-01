@@ -1,0 +1,100 @@
+---
+title: Under the hood of torch.compile
+module: M2 · Autograd
+order: 4.28
+summary: Trace Python bytecode into guarded FX regions, compiled backward graphs, graph breaks, and cached specializations.
+colab: m2_autograd.ipynb
+concepts: [TorchDynamo, FX graph, guards, graph break, AOTAutograd, torch.cond]
+duration: 17
+---
+import CompileControlFlowLab from '../../components/widgets/CompileControlFlowLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+This is the technical companion to the animated graph-break lesson. Use it when you want the machinery and debugging vocabulary.
+
+## What does `torch.compile` add?
+
+TorchDynamo interprets Python bytecode and extracts supported tensor operations into FX graph regions. Python work that cannot be captured remains in rewritten bytecode.
+
+Each cached region has **guards**: assumptions about shapes, dtypes, devices, `requires_grad`, Python values, and other state that must still be true before reuse.
+
+For training, AOTAutograd creates backward graph regions for captured forward regions. Calling `.backward()` still enters the eager autograd engine, which runs compiled backward regions like larger operations.
+
+<CompileControlFlowLab client:visible />
+
+<Callout type="note" title="Three meanings of graph">
+An eager autograd graph describes one backward pass. An FX graph is a guarded compiler representation. The Python program remains the source and can run between compiled regions.
+</Callout>
+
+## What happens at an `if`?
+
+| Condition | Typical behavior |
+| --- | --- |
+| Python value such as `self.training` | Specialize the graph and guard the value. |
+| Tensor metadata such as shape | Specialize it or represent dimensions symbolically. |
+| Tensor data such as `x.sum() > 0` | Break capture so Python can obtain a runtime boolean. |
+| `torch.cond(pred, true_fn, false_fn, operands)` | Store both restricted branch functions as structured subgraphs. |
+
+A graph break is correctness-preserving. Dynamo compiles the region collected so far, Python executes the unsupported decision, and capture may resume in a continuation.
+
+## Why can another input compile again?
+
+A cached graph is reusable only while its guards pass. A new shape or specialized Python value can fail a guard and produce another compiled entry.
+
+```python
+compiled_model = torch.compile(model, dynamic=True)
+```
+
+Dynamic shapes can reduce shape-driven recompilation, but operations and shape-dependent branches may still require guards or specialization. Current `torch.compile` documentation describes a default recompilation limit of eight entries before eager fallback for that region.
+
+## When is `torch.cond` appropriate?
+
+Use it when a branch depends on tensor data and both branches satisfy the structured-control-flow contract. Their signatures and output metadata must match, and unsupported mutation or side effects must be removed.
+
+```python
+def positive(x):
+    return torch.sin(x)
+
+def negative(x):
+    return torch.cos(x)
+
+@torch.compile
+def forward(x):
+    return torch.cond(x.sum() > 0, positive, negative, (x,))
+```
+
+`torch.cond` remains a prototype feature, so confirm its restrictions against the PyTorch version you deploy.
+
+## Why can in-place mutation fail backward?
+
+When autograd saves a tensor for backward, it also tracks the tensor's version. An in-place operation increments that version. Backward raises an error if the saved value has changed rather than silently computing the wrong gradient.
+
+```python
+x = torch.ones(3, requires_grad=True)
+y = x.exp()          # backward needs this output
+y.add_(1)            # version changes
+y.sum().backward()   # RuntimeError
+```
+
+## How do you inspect your program?
+
+```bash
+TORCH_LOGS="graph_breaks,recompiles,guards" python train.py
+```
+
+Use `torch.compile(fn, fullgraph=True)` when a region should be one graph. It raises at the first break instead of silently continuing with multiple regions.
+
+Then choose deliberately: rewrite the operation, use structured control flow, accept a stable break, or keep that function eager.
+
+<Quiz client:visible question="Positive and negative inputs alternate through if x.sum() > 0. What should you investigate?" answer="The branch depends on tensor data, so ordinary Python control flow breaks capture. Inspect graph-break logs, then consider torch.cond if both branches satisfy its restrictions." />
+
+## Further reading
+
+- [Dynamo core concepts](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/compile/programming_model.dynamo_core_concepts.html)
+- [torch.compile programming model](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/compile/programming_model.html)
+- [Using `fullgraph=True`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/compile/programming_model.fullgraph_true.html)
+- [torch.compile API and recompilation behavior](https://docs.pytorch.org/docs/stable/generated/torch.compile)
+- [`torch.cond` contract](https://docs.pytorch.org/docs/stable/generated/torch.cond.html)
+- [Compiler FAQ: training and AOTAutograd](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/torch.compiler_faq.html)
+- [Autograd mechanics and in-place correctness](https://docs.pytorch.org/docs/stable/notes/autograd.html)

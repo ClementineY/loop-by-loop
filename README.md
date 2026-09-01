@@ -12,7 +12,7 @@ The learning sequence is the product: see a concept, manipulate a small model of
 
 ## What is included
 
-- 26 focused lessons from tensor shapes through a complete classifier
+- 27 focused lessons from tensor shapes through a complete classifier
 - Six accessible interactive labs for tensors, autograd, optimization, activations, training, and convolution
 - Eight generated Colab notebooks containing runnable PyTorch examples
 - A dedicated experiment catalog with one guided Colab investigation per module

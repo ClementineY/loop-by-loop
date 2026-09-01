@@ -35,5 +35,3 @@ loss.backward()            # follow it backward
 <Callout type="note" title="In-place is not the defining feature">
 In-place operations are constrained because backward may need an earlier tensor value. PyTorch checks mutations rather than treating them as its graph-building strategy.
 </Callout>
-
-Next: [choose where gradients stop](../computation-graphs/), then [watch Python break a compiled graph](../compile-graphs/).

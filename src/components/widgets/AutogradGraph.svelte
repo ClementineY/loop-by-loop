@@ -24,7 +24,7 @@
 
 <section class="lab" aria-labelledby="autograd-title">
   <header>
-    <div><span>Autograd lifecycle</span><h3 id="autograd-title">Watch PyTorch build and use the tape</h3></div>
+    <div><span>One eager run</span><h3 id="autograd-title">See what autograd remembers</h3></div>
     <button onclick={next}>{phase === 3 ? 'Start again ↻' : 'Next step →'}</button>
   </header>
 
@@ -48,20 +48,20 @@
     <aside aria-live="polite">
       {#if phase === 0}
         <span>01 · choose leaves</span>
-        <h4>Track only what may learn.</h4>
-        <p><code>w</code> and <code>b</code> are user-created leaves. Turning on <code>requires_grad</code> tells PyTorch to remember operations that depend on them.</p>
+        <h4>Choose the leaves.</h4>
+        <p>Track parameters that may learn.</p>
       {:else if phase === 1}
         <span>02 · ordinary Python runs</span>
-        <h4>The forward pass leaves a trail.</h4>
-        <p>Each result stores the operation that created it. The final loss points backward through <code>Pow → Add → Mul</code>.</p>
+        <h4>Forward records a route.</h4>
+        <p><code>loss</code> points back through <code>Pow → Add → Mul</code>.</p>
       {:else if phase === 2}
         <span>03 · ask one question</span>
-        <h4>How would each leaf change loss?</h4>
-        <p><code>backward()</code> walks the saved trail in reverse. The answers land in <code>w.grad</code> and <code>b.grad</code>.</p>
+        <h4>Backward follows it.</h4>
+        <p>The answers land in <code>w.grad</code> and <code>b.grad</code>.</p>
       {:else}
         <span>04 · prepare the next batch</span>
-        <h4>Clear the answers, not the parameters.</h4>
-        <p>PyTorch adds new gradients to old ones. The training loop clears <code>.grad</code> before measuring the next batch.</p>
+        <h4>Clear before the next run.</h4>
+        <p>Gradients accumulate unless the training loop resets them.</p>
       {/if}
     </aside>
   </div>

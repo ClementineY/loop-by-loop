@@ -12,6 +12,8 @@ import Callout from '../../components/Callout.astro';
 
 ## Watch the break
 
+Eager autograd records a fresh route for each call. `torch.compile` asks a different question: can this Python program be captured and reused as optimized FX graphs?
+
 The model does not break. Gradients do not break. **Only compiler capture breaks.**
 
 <NetworkGraphBreakLab client:visible />

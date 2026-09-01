@@ -1,59 +1,39 @@
 ---
-title: Autograd records the route
+title: The essence of autograd
 module: M2 · Autograd
 order: 3
-summary: See how requires_grad, the forward graph, backward, and zero_grad form one repeatable lifecycle.
+summary: See what PyTorch records during one forward pass and how backward uses that temporary route.
 colab: m2_autograd.ipynb
-concepts: [requires_grad, grad_fn, backward, gradient accumulation]
-duration: 11
+concepts: [define-by-run, requires_grad, grad_fn, backward]
+duration: 8
 ---
 import AutogradGraph from '../../components/widgets/AutogradGraph.svelte';
-import Quiz from '../../components/Quiz.svelte';
 import Callout from '../../components/Callout.astro';
 
-## PyTorch remembers how the answer was made
+## Does PyTorch modify one permanent graph?
 
-Now that a gradient has a concrete meaning, the next question is how PyTorch obtains it. The forward pass leaves a trail of the operations that produced the loss.
+No. Eager PyTorch is **define-by-run**: Python runs, and autograd records the tensor operations that produced this result.
 
-Use the four steps below in order. Watch which objects appear, where gradients are stored, and what gets cleared for the next batch.
+Run the function again and PyTorch records a new route. A different `if` branch can therefore produce a different graph.
 
 <AutogradGraph client:visible />
 
-## Read the trail in real PyTorch
+## Three moments
+
+**Forward records.** Results point back to the operations that created them.
+
+**Backward follows.** `loss.backward()` walks that route and fills leaf gradients.
+
+**The next call starts fresh.** The old route is normally released after backward.
 
 ```python
-import torch
-
-x = torch.tensor(2.0)                         # input: no gradient needed
-w = torch.tensor(-1.0, requires_grad=True)    # leaf parameter
-b = torch.tensor(0.5, requires_grad=True)     # leaf parameter
-
-loss = (x * w + b) ** 2                       # forward: graph is recorded
-print(loss.grad_fn)                            # <PowBackward...>
-
-loss.backward()                               # backward: fill leaf .grad
-print(w.grad, b.grad)                          # tensor(-6.), tensor(-3.)
+w = torch.tensor(-1., requires_grad=True)
+loss = (2 * w + .5) ** 2   # record this run
+loss.backward()            # follow it backward
 ```
 
-Three object properties tell most of the story:
-
-- `requires_grad`: should operations involving this tensor be recorded?
-- `grad_fn`: which recorded operation created this result?
-- `.grad`: the accumulated answer for a leaf tensor after `backward()`.
-
-## The lifecycle inside every training loop
-
-```python
-optimizer.zero_grad()   # 1. clear answers from the previous batch
-loss = loss_fn(model(x), target)  # 2. run forward and record a new graph
-loss.backward()         # 3. measure each parameter's effect on loss
-optimizer.step()        # 4. use those measurements to update parameters
-```
-
-M2 focuses on the first three lines. The next module turns the fourth line into learning.
-
-<Callout type="warn" title="Why clear gradients?">
-`backward()` adds into each leaf's `.grad`. That is useful when intentionally combining several mini-batches, but an ordinary training iteration calls `optimizer.zero_grad()` before measuring the next one.
+<Callout type="note" title="In-place is not the defining feature">
+In-place operations are constrained because backward may need an earlier tensor value. PyTorch checks mutations rather than treating them as its graph-building strategy.
 </Callout>
 
-<Quiz client:visible question="After the forward pass, loss.grad_fn exists but w.grad is still None. What is missing?" answer="The backward pass. The forward pass records how loss was produced; loss.backward() traverses that record and fills gradients on the leaf parameters." />
+Next: [choose where gradients stop](../computation-graphs/), then [watch Python break a compiled graph](../compile-graphs/).

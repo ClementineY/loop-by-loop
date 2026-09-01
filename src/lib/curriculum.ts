@@ -155,3 +155,12 @@ export function gradientScalingTrace(gradient:number,scale:number,precision:Floa
   const finite=Number.isFinite(storedScaledGradient),restoredGradient=finite?storedScaledGradient/scale:NaN;
   return {gradient,scale,withoutScaling,scaledGradient,storedScaledGradient,restoredGradient,finite};
 }
+
+export type ControlFlowMode='eager'|'python-flag'|'tensor-if'|'torch-cond';
+export function controlFlowCompilePlan(mode:ControlFlowMode,shape:number,predicate:boolean) {
+  const branch=predicate?'positive':'negative';
+  if(mode==='eager')return {branch,cacheKey:null,graphBreak:false,guard:null,regions:['runtime forward path'],capturesBothBranches:false};
+  if(mode==='python-flag')return {branch,cacheKey:`shape:${shape}|flag:${predicate}`,graphBreak:false,guard:`shape == [${shape}] and flag is ${predicate}`,regions:[`${branch} FX graph`],capturesBothBranches:false};
+  if(mode==='tensor-if')return {branch,cacheKey:`shape:${shape}|branch:${branch}`,graphBreak:true,guard:`shape == [${shape}]`,regions:['prefix FX graph','Python branch decision',`${branch} continuation graph`],capturesBothBranches:false};
+  return {branch,cacheKey:`shape:${shape}|cond`,graphBreak:false,guard:`shape == [${shape}]`,regions:['FX graph with cond','true branch subgraph','false branch subgraph'],capturesBothBranches:true};
+}

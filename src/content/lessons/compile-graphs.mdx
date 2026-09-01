@@ -1,0 +1,94 @@
+---
+title: When Python becomes a compiled graph
+module: M2 · Autograd
+order: 4.25
+summary: Separate eager autograd graphs from torch.compile FX graphs, then predict graph breaks, guards, recompilations, and structured control flow.
+colab: m2_autograd.ipynb
+concepts: [torch.compile, TorchDynamo, FX graph, graph break, guards, torch.cond]
+duration: 15
+---
+import CompileControlFlowLab from '../../components/widgets/CompileControlFlowLab.svelte';
+import Quiz from '../../components/Quiz.svelte';
+import Callout from '../../components/Callout.astro';
+
+## Does PyTorch modify one permanent graph?
+
+No. Eager PyTorch is **define-by-run**: Python executes, tensor operations create the result, and autograd records the operations from the path that actually ran. The next call may take another branch and record another backward route.
+
+This flexibility—not in-place graph modification—is the important distinction. In-place tensor operations are actually constrained because backward may need an earlier value.
+
+## What does `torch.compile` add?
+
+`torch.compile` asks TorchDynamo to interpret Python bytecode and extract supported PyTorch operations into FX graph regions. The remaining Python work stays in rewritten bytecode. Each cached region also gets **guards**: conditions such as input shape, dtype, device, `requires_grad`, and specialized Python values that must remain true before reuse.
+
+For training, captured forward regions pass through AOTAutograd, which creates corresponding backward graph regions. Calling `.backward()` still enters the autograd engine; compiled backward regions behave like larger recorded operations within that execution.
+
+<CompileControlFlowLab client:visible />
+
+## What happens when Python reaches an `if`?
+
+It depends on what determines the condition:
+
+| Condition | Typical compiled behavior |
+| --- | --- |
+| Static Python value, such as `self.training` | Specialize the captured graph and add a guard; a changed value can cause another compilation. |
+| Tensor metadata, such as a guarded shape | Specialize or represent it symbolically; a failed shape guard may recompile, potentially with more dynamic shape handling. |
+| Tensor data, such as `if x.sum() > 0` | Python needs a runtime boolean, so ordinary Dynamo capture produces a graph break around the decision. |
+| `torch.cond(predicate, true_fn, false_fn, operands)` | Represent both restricted branch functions as structured control flow inside a capturable graph. |
+
+A graph break is a correctness-preserving boundary. Dynamo compiles the graph collected so far, lets Python execute the unsupported part, then may resume capture in a continuation. The program still runs, but the compiler sees smaller regions and loses optimization opportunities.
+
+## Why does changing an input sometimes compile again?
+
+A cached graph is valid only while all its guards pass. If the first call used shape `[4]` and a later call uses `[8]`, the old shape guard may fail. Dynamo then searches other cached entries and, if none match, traces and compiles another entry. `dynamic=True` can reduce shape-driven recompilation, but some operations still require specialization.
+
+```python
+compiled_model = torch.compile(model, dynamic=True)
+```
+
+The goal is not “zero recompilations at any cost.” It is a bounded number of useful graph variants that are reused often enough to repay compilation time.
+
+## When should `torch.cond` replace a Python branch?
+
+Use it when a branch genuinely depends on tensor data and both branches can obey its capture restrictions. The branch functions must have compatible inputs and outputs and avoid unsupported side effects. `torch.cond` remains classified as a prototype feature in current PyTorch documentation, so check the supported types and restrictions for the version you deploy.
+
+```python
+def positive(x):
+    return torch.sin(x)
+
+def negative(x):
+    return torch.cos(x)
+
+@torch.compile
+def forward(x):
+    return torch.cond(x.sum() > 0, positive, negative, (x,))
+```
+
+## Why can an in-place operation upset autograd?
+
+When an operation saves a tensor for backward, autograd also saves its version counter. An in-place mutation increments that counter. If backward later discovers that a saved value changed, it raises an error instead of silently using the wrong number.
+
+```python
+x = torch.ones(3, requires_grad=True)
+y = x.exp()       # exp backward needs its output
+y.add_(1)         # changes the saved tensor's version
+y.sum().backward()  # RuntimeError: modified in-place
+```
+
+<Callout type="info" title="Three different meanings of graph">
+The eager autograd graph explains a particular backward pass. An FX graph is a compiler representation protected by guards. The original Python program remains the source of control flow and may execute between compiled regions.
+</Callout>
+
+## How do you find graph breaks and recompilations?
+
+Use `fullgraph=True` while diagnosing a region that you expect to capture as one graph; it errors at a graph break instead of silently continuing with multiple regions. PyTorch logging can show the locations and reasons:
+
+```bash
+TORCH_LOGS="graph_breaks,recompiles,guards" python train.py
+```
+
+Then decide whether to express the computation differently, use structured control flow, accept a small stable break, or leave that function eager.
+
+<Quiz client:visible question="A compiled function contains if x.sum() > 0, and positive and negative inputs alternate. What should you investigate?" answer="The condition depends on tensor data, so ordinary Python branching creates a graph break. Inspect graph-break logs, then consider torch.cond if both branches satisfy its restrictions—or deliberately keep this small region eager." />
+
+Further reading: [Dynamo core concepts](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/compile/programming_model.dynamo_core_concepts.html), [torch.compile programming model](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/compile/programming_model.html), [torch.cond](https://docs.pytorch.org/docs/stable/generated/torch.cond.html), and [autograd mechanics](https://docs.pytorch.org/docs/stable/notes/autograd.html).

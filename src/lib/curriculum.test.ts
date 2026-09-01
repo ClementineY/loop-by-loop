@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,gradientScalingTrace,linearParameterCount,matrix2x2Trace,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,roundToBFloat16,roundToFloat16,softmax2,splitCounts,tensorStorageMB} from './curriculum';
+import {bestValidationEpoch,binaryTrainingStep,controlFlowCompilePlan,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,gradientScalingTrace,linearParameterCount,matrix2x2Trace,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,roundToBFloat16,roundToFloat16,softmax2,splitCounts,tensorStorageMB} from './curriculum';
 
 describe('course visual calculations',()=>{
   it('matches the default neuron arithmetic',()=>{
@@ -101,5 +101,13 @@ describe('course visual calculations',()=>{
     expect(trace.storedScaledGradient).not.toBe(0);
     expect(trace.restoredGradient).toBeCloseTo(1e-8,9);
     expect(trace.finite).toBe(true);
+  });
+  it('distinguishes eager paths, guarded branches, graph breaks, and torch.cond',()=>{
+    expect(controlFlowCompilePlan('eager',4,true).cacheKey).toBeNull();
+    expect(controlFlowCompilePlan('python-flag',4,true).guard).toContain('flag is true');
+    expect(controlFlowCompilePlan('python-flag',4,false).cacheKey).not.toBe(controlFlowCompilePlan('python-flag',4,true).cacheKey);
+    expect(controlFlowCompilePlan('tensor-if',4,false).graphBreak).toBe(true);
+    expect(controlFlowCompilePlan('torch-cond',4,true).cacheKey).toBe(controlFlowCompilePlan('torch-cond',4,false).cacheKey);
+    expect(controlFlowCompilePlan('torch-cond',4,true).capturesBothBranches).toBe(true);
   });
 });

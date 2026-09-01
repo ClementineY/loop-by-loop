@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,linearParameterCount,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,softmax2,splitCounts,tensorStorageMB} from './curriculum';
+import {bestValidationEpoch,binaryTrainingStep,conv2dGeometry,estimateTrainingMemory,estimateTrainingScale,examplesPerSecond,generalizationLoss,gradientScalingTrace,linearParameterCount,matrix2x2Trace,multiclassTrainingStep,neuronForward,parseTuneValues,quantizeScalar,reconstructionTrainingStep,reduceShape,regressionTrainingStep,roundToBFloat16,roundToFloat16,softmax2,splitCounts,tensorStorageMB} from './curriculum';
 
 describe('course visual calculations',()=>{
   it('matches the default neuron arithmetic',()=>{
@@ -83,5 +83,23 @@ describe('course visual calculations',()=>{
     expect(scale.optimizerStepsPerEpoch).toBe(1563);
     expect(scale.throughput).toBe(320);
     expect(scale.epochSeconds).toBeCloseTo(312.6);
+  });
+  it('rounds values to real FP16 and BF16 representations',()=>{
+    expect(roundToFloat16(1.337)).toBeCloseTo(1.3369140625,10);
+    expect(roundToBFloat16(1.337)).toBeCloseTo(1.3359375,10);
+    expect(roundToFloat16(1e-8)).toBe(0);
+  });
+  it('traces matrix rounding without changing its shape',()=>{
+    const trace=matrix2x2Trace([1.2345,-.3333,.0001,2.7183],[.7071,1.4142,-1.1111,.0625],'fp16');
+    expect(trace.output).toHaveLength(4);
+    expect(trace.bytesPerElement).toBe(2);
+    expect(trace.maxAbsoluteError).toBeGreaterThan(0);
+  });
+  it('shows how scaling rescues a tiny FP16 gradient',()=>{
+    const trace=gradientScalingTrace(1e-8,4096);
+    expect(trace.withoutScaling).toBe(0);
+    expect(trace.storedScaledGradient).not.toBe(0);
+    expect(trace.restoredGradient).toBeCloseTo(1e-8,9);
+    expect(trace.finite).toBe(true);
   });
 });

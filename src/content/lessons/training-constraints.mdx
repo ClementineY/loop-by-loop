@@ -10,6 +10,7 @@ duration: 16
 import TrainingConstraintsLab from '../../components/widgets/TrainingConstraintsLab.svelte';
 import Callout from '../../components/Callout.astro';
 import Quiz from '../../components/Quiz.svelte';
+import MixedPrecisionTrace from '../../components/widgets/MixedPrecisionTrace.svelte';
 
 ## What does stable training look like?
 
@@ -19,20 +20,11 @@ Stable does not mean perfectly smooth. Mini-batches make loss noisy. A healthy r
 
 ## Why can mixed precision help?
 
-Modern accelerators can execute many FP16 or BF16 operations faster and store eligible activations in fewer bytes. Automatic mixed precision chooses lower precision for suitable operations and retains higher precision where range or accuracy is important.
+Recall the M2 model: [a gradient is a sensitivity](../gradient-sensitivity/), and backward propagates that sensitivity through the [recorded computation graph](../computation-graphs/). Automatic mixed precision keeps that graph and chain rule. It changes the numeric representation used by eligible operations; loss scaling changes the magnitude of the backward signal temporarily.
 
-```python
-scaler = torch.amp.GradScaler("cuda")
-for x, y in loader:
-    optimizer.zero_grad()
-    with torch.autocast(device_type="cuda", dtype=torch.float16):
-        loss = loss_fn(model(x), y)
-    scaler.scale(loss).backward()
-    scaler.step(optimizer)
-    scaler.update()
-```
+<MixedPrecisionTrace client:visible />
 
-FP16 has limited numerical range, so gradient scaling makes tiny gradients less likely to underflow before the update. BF16 has fewer fraction bits but the same exponent width as FP32, so it often needs less range management on supported hardware. Speedup is hardware- and workload-dependent; measure it.
+Lower-precision matrix operations can move fewer bytes and use specialized accelerator hardware. FP16 has limited numerical range, so scaling helps tiny intermediate backward signals survive; `scaler.step()` unscales the parameter gradients and skips the update if it finds non-finite values. BF16 retains FP32’s exponent width but has fewer fraction bits, making underflow less common while increasing rounding error. Actual speedup remains hardware- and workload-dependent.
 
 ## What actually consumes training memory?
 

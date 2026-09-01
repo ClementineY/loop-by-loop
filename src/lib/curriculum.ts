@@ -113,3 +113,45 @@ export function estimateTrainingScale(options:{datasetExamples:number;microBatch
   const epochSeconds=optimizerStepsPerEpoch*updateMilliseconds/1000;
   return {globalBatch,optimizerStepsPerEpoch,updateMilliseconds,throughput,epochSeconds};
 }
+
+export type FloatingPrecision='fp32'|'fp16'|'bf16';
+export function roundToFloat16(value:number) {
+  const float=new Float32Array(1),bits=new Uint32Array(float.buffer);float[0]=value;
+  const word=bits[0],sign=(word>>>16)&0x8000,exponent=(word>>>23)&0xff,mantissa=word&0x7fffff;
+  let half:number;
+  if(exponent===0xff)half=sign|0x7c00|(mantissa?0x200:0);
+  else {
+    const halfExponent=exponent-127+15;
+    if(halfExponent>=31)half=sign|0x7c00;
+    else if(halfExponent<=0){
+      if(halfExponent<-10)half=sign;
+      else {const fullMantissa=mantissa|0x800000,shift=14-halfExponent,base=fullMantissa>>>shift,remainder=fullMantissa&((1<<shift)-1),halfway=1<<(shift-1);half=sign|base;if(remainder>halfway||(remainder===halfway&&(base&1)))half++;}
+    } else {const base=sign|(halfExponent<<10)|(mantissa>>>13),remainder=mantissa&0x1fff;half=base;if(remainder>0x1000||(remainder===0x1000&&(base&1)))half++;}
+  }
+  const halfSign=(half&0x8000)<<16,halfExponent=(half>>>10)&0x1f,halfMantissa=half&0x3ff;
+  if(halfExponent===0)bits[0]=halfMantissa===0?halfSign:halfSign|((127-15-9+Math.floor(Math.log2(halfMantissa)))<<23)|((halfMantissa<<(23-Math.floor(Math.log2(halfMantissa))))&0x7fffff);
+  else if(halfExponent===0x1f)bits[0]=halfSign|0x7f800000|(halfMantissa?0x400000:0);
+  else bits[0]=halfSign|((halfExponent-15+127)<<23)|(halfMantissa<<13);
+  return float[0];
+}
+
+export function roundToBFloat16(value:number) {
+  const float=new Float32Array(1),bits=new Uint32Array(float.buffer);float[0]=value;
+  const word=bits[0],roundingBias=0x7fff+((word>>>16)&1);bits[0]=(word+roundingBias)&0xffff0000;
+  return float[0];
+}
+
+export const roundForPrecision=(value:number,precision:FloatingPrecision)=>precision==='fp32'?Math.fround(value):precision==='fp16'?roundToFloat16(value):roundToBFloat16(value);
+export function matrix2x2Trace(left:number[],right:number[],precision:FloatingPrecision) {
+  if(left.length!==4||right.length!==4)throw new RangeError('both matrices must be 2 × 2');
+  const roundedLeft=left.map(value=>roundForPrecision(value,precision)),roundedRight=right.map(value=>roundForPrecision(value,precision));
+  const multiply=(a:number[],b:number[])=>[a[0]*b[0]+a[1]*b[2],a[0]*b[1]+a[1]*b[3],a[2]*b[0]+a[3]*b[2],a[2]*b[1]+a[3]*b[3]];
+  const reference=multiply(left,right).map(Math.fround),output=multiply(roundedLeft,roundedRight).map(value=>roundForPrecision(value,precision));
+  return {roundedLeft,roundedRight,reference,output,maxAbsoluteError:Math.max(...output.map((value,index)=>Math.abs(value-reference[index]))),bytesPerElement:precision==='fp32'?4:2};
+}
+
+export function gradientScalingTrace(gradient:number,scale:number,precision:FloatingPrecision='fp16') {
+  const withoutScaling=roundForPrecision(gradient,precision),scaledGradient=gradient*scale,storedScaledGradient=roundForPrecision(scaledGradient,precision);
+  const finite=Number.isFinite(storedScaledGradient),restoredGradient=finite?storedScaledGradient/scale:NaN;
+  return {gradient,scale,withoutScaling,scaledGradient,storedScaledGradient,restoredGradient,finite};
+}
